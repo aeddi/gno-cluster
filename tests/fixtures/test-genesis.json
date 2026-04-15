@@ -1,0 +1,35 @@
+{
+  "genesis_time": "2026-01-01T00:00:00Z",
+  "chain_id": "test-chain",
+  "consensus_params": {
+    "Block": { "MaxTxBytes": "1000000", "MaxDataBytes": "2000000" },
+    "Validator": { "PubKeyTypeURLs": ["/tm.PubKeyEd25519"] }
+  },
+  "validators": [
+    {
+      "address": "g1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "pub_key": { "@type": "/tm.PubKeyEd25519", "value": "AAAA" },
+      "power": "1",
+      "name": "val-1"
+    },
+    {
+      "address": "g1bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "pub_key": { "@type": "/tm.PubKeyEd25519", "value": "BBBB" },
+      "power": "1",
+      "name": "val-2"
+    }
+  ],
+  "app_hash": null,
+  "app_state": {
+    "@type": "/gno.GenesisState",
+    "balances": [
+      "g1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=10000000ugnot",
+      "g1bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb=20000000ugnot",
+      "g1ccccccccccccccccccccccccccccccccccccccc=30000000ugnot"
+    ],
+    "txs": [
+      { "msg": [{ "@type": "/vm.m_addpkg" }] },
+      { "msg": [{ "@type": "/vm.m_addpkg" }] }
+    ]
+  }
+}
