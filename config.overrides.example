@@ -1,0 +1,17 @@
+# ---- Global Overrides (applied to all nodes)
+# Lines before the first [section] header apply to every node.
+# consensus.timeout_commit = "3s"
+# mempool.size = 10000
+
+# ---- Per-Node Overrides
+# Section headers target specific nodes. Everything under a header
+# belongs to that section until the next header appears.
+# Global section is top-only — cannot be re-entered after a [section].
+# Last-match wins: if the same key is set for a node in multiple
+# sections, the last value in file order takes effect.
+
+# [node-1]
+# consensus.timeout_commit = "5s"
+
+# [node-2, node-3]
+# mempool.size = 5000
