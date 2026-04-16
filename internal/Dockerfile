@@ -42,7 +42,7 @@ ENTRYPOINT ["/entrypoint.sh"]
 # ---- Watchtower Builder
 FROM golang:1.25-alpine AS watchtower-builder
 
-ARG WATCHTOWER_REPO=gnolang/val-companion
+ARG WATCHTOWER_REPO=aeddi/gno-watchtower
 ARG WATCHTOWER_COMMIT_HASH
 ARG WATCHTOWER_VERSION
 
