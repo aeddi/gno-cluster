@@ -1,0 +1,68 @@
+services:
+  watchtower:
+    image: gno-cluster-watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - ./watchtower.toml:/config.toml:ro
+    command: run /config.toml
+    networks:
+      - watchtower-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "2"
+
+  victoria-metrics:
+    image: victoriametrics/victoria-metrics:v1.115.0
+    container_name: victoria-metrics
+    restart: unless-stopped
+    volumes:
+      - ./victoria-data:/victoria-metrics-data
+    networks:
+      - watchtower-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "2"
+
+  loki:
+    image: grafana/loki:3.4.4
+    container_name: loki
+    restart: unless-stopped
+    volumes:
+      - ./loki-data:/loki
+      - ./loki-config.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - watchtower-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "2"
+
+  grafana:
+    image: grafana/grafana:12.4.1
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./grafana-data:/var/lib/grafana
+      - ./grafana-provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "__GRAFANA_PORT__:3000"
+    networks:
+      - watchtower-net
+    depends_on:
+      - victoria-metrics
+      - loki
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "2"

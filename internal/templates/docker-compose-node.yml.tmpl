@@ -1,0 +1,44 @@
+
+  node-__N__:
+    image: gno-cluster-gnoland:latest
+    container_name: node-__N__
+    restart: on-failure
+    environment:
+      - NODE_NAME=node-__N__
+      - PERSISTENT_PEERS=__PEERS__
+    volumes:
+      - ./gnoland-data-__N__:/gnoland-data
+      - ./genesis.json:/genesis.json:ro
+      - ./config.overrides:/config.overrides:ro
+    ports:
+      - "__RPC_PORT__:26657"
+      - "__P2P_PORT__:26656"
+    networks:
+      - sidecar-__N__
+__NODE_NETWORKS__
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  sentinel-__N__:
+    image: gno-cluster-sentinel:latest
+    container_name: sentinel-__N__
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./genesis.json:/genesis.json:ro
+      - ./sentinel-__N__-config.toml:/config.toml:ro
+    command: run /config.toml
+    networks:
+      - watchtower-net
+      - sidecar-__N__
+    depends_on:
+      - node-__N__
+      - watchtower
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "2"
