@@ -96,13 +96,17 @@ init:
 	done
 	@echo ""
 	@echo "==> Node information:"
-	@printf "  %-10s %-44s %-44s %s\n" "Node" "Address" "PubKey" "Node ID"
-	@printf "  %-10s %-44s %-44s %s\n" "----" "-------" "------" "-------"
+	@printf "  %-12s %-44s %-96s %s\n" "Moniker" "Address" "PubKey" "Node ID"
+	@printf "  %-12s %-44s %-96s %s\n" "-------" "-------" "------" "-------"
 	@for i in $$(seq 1 $(NUM_NODES)); do \
-		ADDR=$$(jq -r '.address' "secrets/node-$$i/priv_validator_key.json"); \
-		PUBKEY=$$(jq -r '.pub_key.value' "secrets/node-$$i/priv_validator_key.json"); \
+		VAL_INFO=$$($(GNOLAND_RUN) \
+			-v "$(PROJECT_ROOT)/secrets/node-$$i:/gnoland-data" \
+			gno-cluster-gnoland:latest \
+			secrets get validator_key --data-dir /gnoland-data 2>/dev/null); \
+		ADDR=$$(echo "$$VAL_INFO" | jq -r '.address'); \
+		PUBKEY=$$(echo "$$VAL_INFO" | jq -r '.pub_key'); \
 		NODE_ID=$$(cat "secrets/node-$$i/node_id"); \
-		printf "  %-10s %-44s %-44s %s\n" "node-$$i" "$$ADDR" "$$PUBKEY" "$$NODE_ID"; \
+		printf "  %-12s %-44s %-96s %s\n" "node-$$i" "$$ADDR" "$$PUBKEY" "$$NODE_ID"; \
 	done
 	@echo ""
 	@echo "==> Provide your genesis.json, then run 'make up'"
@@ -258,25 +262,22 @@ print-infos:
 	fi
 	@echo "==> Node information ($(NUM_NODES) nodes, $(TOPOLOGY) topology):"
 	@echo ""
-	@printf "  %-10s %-20s %-44s %-44s %-22s %s\n" \
-		"Node" "Moniker" "Address" "PubKey" "RPC" "P2P Port"
-	@printf "  %-10s %-20s %-44s %-44s %-22s %s\n" \
-		"----" "-------" "-------" "------" "---" "--------"
+	@printf "  %-12s %-44s %-96s %-26s %-8s %s\n" \
+		"Moniker" "Address" "PubKey" "RPC" "P2P" "Node ID"
+	@printf "  %-12s %-44s %-96s %-26s %-8s %s\n" \
+		"-------" "-------" "------" "---" "---" "-------"
 	@for i in $$(seq 1 $(NUM_NODES)); do \
-		ADDR=$$(jq -r '.address' "secrets/node-$$i/priv_validator_key.json"); \
-		PUBKEY=$$(jq -r '.pub_key.value' "secrets/node-$$i/priv_validator_key.json"); \
+		VAL_INFO=$$($(GNOLAND_RUN) \
+			-v "$(PROJECT_ROOT)/secrets/node-$$i:/gnoland-data" \
+			gno-cluster-gnoland:latest \
+			secrets get validator_key --data-dir /gnoland-data 2>/dev/null); \
+		ADDR=$$(echo "$$VAL_INFO" | jq -r '.address'); \
+		PUBKEY=$$(echo "$$VAL_INFO" | jq -r '.pub_key'); \
 		NODE_ID=$$(cat "secrets/node-$$i/node_id" 2>/dev/null || echo "unknown"); \
 		RPC_PORT=$$(($(GNOLAND_RPC_PORT_BASE) + i - 1)); \
 		P2P_PORT=$$(($(GNOLAND_P2P_PORT_BASE) + i - 1)); \
-		MONIKER="node-$$i"; \
-		printf "  %-10s %-20s %-44s %-44s localhost:%-12s %s\n" \
-			"node-$$i" "$$MONIKER" "$$ADDR" "$$PUBKEY" "$$RPC_PORT" "$$P2P_PORT"; \
-	done
-	@echo ""
-	@echo "  Node IDs:"
-	@for i in $$(seq 1 $(NUM_NODES)); do \
-		NODE_ID=$$(cat "secrets/node-$$i/node_id" 2>/dev/null || echo "unknown"); \
-		echo "    node-$$i: $$NODE_ID"; \
+		printf "  %-12s %-44s %-96s http://localhost:%-8s %-8s %s\n" \
+			"node-$$i" "$$ADDR" "$$PUBKEY" "$$RPC_PORT" "$$P2P_PORT" "$$NODE_ID"; \
 	done
 
 # ---- Update
