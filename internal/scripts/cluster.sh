@@ -56,39 +56,6 @@ validate_port_ranges() {
     fi
 }
 
-# ---- Help
-
-cmd_help() {
-    cat <<'EOF'
-gno-cluster — spin up a local gnoland cluster with configurable topology and monitoring.
-
-Usage: make <target> [args]
-
-Targets:
-  build          Build Docker images (gnoland, watchtower, sentinel)
-  init           Generate node secrets (keys, node IDs)
-  up             Start a new cluster or resume a stopped one
-  down           Stop the cluster (data is preserved)
-  clone          Duplicate current run with fresh chain state
-  status         Show each node's block height, peers, and status
-  logs           Follow logs for a service (make logs svc=node-1)
-  print-infos    Print node addresses, pubkeys, ports, and IDs
-  update         Rebuild images and restart the cluster
-  test           Run unit tests
-  help           Show this help message
-
-Arguments:
-  make up run=<folder>      Resume a specific past run
-  make clone run=<folder>   Clone a specific past run
-  make logs svc=<service>   Follow logs (node-1..N, sentinel-1..N, watchtower, grafana, loki, victoria-metrics)
-
-Configuration:
-  cluster.env               Environment variables (copy from cluster.env.example)
-  config.overrides          Per-node gnoland config (copy from config.overrides.example)
-  genesis.json              Chain genesis file (user-provided)
-EOF
-}
-
 # ---- Build
 
 cmd_build() {
@@ -419,11 +386,10 @@ cmd_update() {
 
 # ---- Dispatch
 
-command="${1:-help}"
+command="${1:?Usage: cluster.sh <command> (build|init|up|down|clone|status|logs|print-infos|update)}"
 shift || true
 
 case "$command" in
-    help)        cmd_help ;;
     build)       cmd_build ;;
     init)        cmd_init ;;
     up)          cmd_up "$@" ;;
@@ -435,8 +401,7 @@ case "$command" in
     update)      cmd_update ;;
     *)
         echo "Unknown command: ${command}"
-        echo ""
-        cmd_help
+        echo "Run 'make help' for usage."
         exit 1
         ;;
 esac

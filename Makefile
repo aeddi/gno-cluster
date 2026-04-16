@@ -1,5 +1,29 @@
 # Makefile — gno-cluster: local gnoland cluster with watchtower monitoring.
-# Thin wrapper that loads env and dispatches to internal/scripts/cluster.sh.
+#
+# Usage: make <target> [args]
+#
+# Targets:
+#   build          Build Docker images (gnoland, watchtower, sentinel)
+#   init           Generate node secrets (keys, node IDs)
+#   up             Start a new cluster or resume a stopped one
+#   down           Stop the cluster (data is preserved)
+#   clone          Duplicate current run with fresh chain state
+#   status         Show each node's block height, peers, and status
+#   logs           Follow logs for a service (make logs svc=node-1)
+#   print-infos    Print node addresses, pubkeys, ports, and IDs
+#   update         Rebuild images and restart the cluster
+#   test           Run unit tests
+#   help           Show this help message
+#
+# Arguments:
+#   make up run=<folder>      Resume a specific past run
+#   make clone run=<folder>   Clone a specific past run
+#   make logs svc=<service>   Follow logs (node-1..N, sentinel-1..N, watchtower, grafana, loki, victoria-metrics)
+#
+# Configuration:
+#   cluster.env               Environment variables (copy from cluster.env.example)
+#   config.overrides          Per-node gnoland config (copy from config.overrides.example)
+#   genesis.json              Chain genesis file (user-provided)
 
 -include cluster.env
 
@@ -25,7 +49,7 @@ CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 .PHONY: help build init up down clone status logs print-infos update test
 
 help:
-	@$(CLUSTER) help
+	@awk '/^# Usage:/,/^$$/{sub(/^# ?/,""); print}' $(MAKEFILE_LIST)
 
 build:
 	@$(CLUSTER) build
