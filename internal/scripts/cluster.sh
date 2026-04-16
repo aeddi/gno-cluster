@@ -330,6 +330,31 @@ cmd_clone() {
 
 # ---- Status
 
+# Renders the status table once. In watch mode, appends \033[K (clear to EOL)
+# to each line so shorter values don't leave stale characters.
+render_status() {
+    local nodes="$1" rpc_base="$2" eol="${3:-}"
+    printf "%-10s %-12s %-8s %-24s %s${eol}\n" "Node" "Status" "Height" "Latest Block" "Peers"
+    printf "%-10s %-12s %-8s %-24s %s${eol}\n" "----" "------" "------" "------------" "-----"
+
+    for i in $(seq 1 "$nodes"); do
+        local port=$((rpc_base + i - 1))
+        local result
+        result=$(http_get "http://localhost:${port}/status") || true
+
+        if [[ -z "$result" ]]; then
+            printf "%-10s %-12s %-8s %-24s %s${eol}\n" "node-${i}" "unreachable" "-" "-" "-"
+        else
+            local height block_time num_peers net_info
+            height=$(echo "$result" | json_val "latest_block_height")
+            block_time=$(echo "$result" | json_val "latest_block_time" | cut -c1-19)
+            net_info=$(http_get "http://localhost:${port}/net_info") || true
+            num_peers=$(echo "$net_info" | json_val "n_peers")
+            printf "%-10s %-12s %-8s %-24s %s${eol}\n" "node-${i}" "running" "${height:-?}" "${block_time:-?}" "${num_peers:-?}"
+        fi
+    done
+}
+
 cmd_status() {
     if [[ ! -L "$CURRENT_LINK" ]]; then
         echo "No active run."
@@ -342,25 +367,23 @@ cmd_status() {
     . "${current}/cluster.env" 2>/dev/null || true
 
     local nodes="${NUM_NODES}" rpc_base="${GNOLAND_RPC_PORT_BASE}"
-    printf "%-10s %-12s %-8s %-24s %s\n" "Node" "Status" "Height" "Latest Block" "Peers"
-    printf "%-10s %-12s %-8s %-24s %s\n" "----" "------" "------" "------------" "-----"
+    local watch_interval="${1:-}"
 
-    for i in $(seq 1 "$nodes"); do
-        local port=$((rpc_base + i - 1))
-        local result
-        result=$(http_get "http://localhost:${port}/status") || true
+    if [[ -n "$watch_interval" ]]; then
+        local eol=$'\033[K'
+        printf '\033[?25l'
+        trap 'printf "\033[?25h\n"' EXIT INT TERM
+        printf '\033[2J'
 
-        if [[ -z "$result" ]]; then
-            printf "%-10s %-12s %-8s %-24s %s\n" "node-${i}" "unreachable" "-" "-" "-"
-        else
-            local height block_time num_peers net_info
-            height=$(echo "$result" | json_val "latest_block_height")
-            block_time=$(echo "$result" | json_val "latest_block_time" | cut -c1-19)
-            net_info=$(http_get "http://localhost:${port}/net_info") || true
-            num_peers=$(echo "$net_info" | json_val "n_peers")
-            printf "%-10s %-12s %-8s %-24s %s\n" "node-${i}" "running" "${height:-?}" "${block_time:-?}" "${num_peers:-?}"
-        fi
-    done
+        while true; do
+            printf '\033[H'
+            printf "Refreshing every %ss (Ctrl+C to stop)${eol}\n\n" "$watch_interval"
+            render_status "$nodes" "$rpc_base" "$eol"
+            sleep "$watch_interval"
+        done
+    else
+        render_status "$nodes" "$rpc_base"
+    fi
 }
 
 # ---- Logs

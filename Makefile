@@ -8,7 +8,7 @@
 #   start    [run=<folder>]   Start a new cluster or resume current or specified past run
 #   stop                      Stop the cluster (data is preserved)
 #   clone    [run=<folder>]   Clone current or specified past run with fresh chain state
-#   status                    Show each node's block height, peers, and status
+#   status   [watch=<sec>]    Show each node's block height, peers, and status
 #   logs     svc=<service>    Follow logs for a service
 #   infos                     Print node addresses, pubkeys, ports, and IDs
 #   update                    Rebuild images and restart the cluster
@@ -61,7 +61,7 @@ clone:
 	@$(CLUSTER) clone $(run)
 
 status:
-	@$(CLUSTER) status
+	@$(CLUSTER) status $(watch)
 
 logs:
 	@$(CLUSTER) logs $(svc)
