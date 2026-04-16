@@ -18,7 +18,7 @@ echo "  Generating watchtower config..."
 cp "${TEMPLATES_DIR}/watchtower-config.toml.tmpl" "${RUN_DIR}/watchtower.toml"
 
 for i in $(seq 1 "$NUM_NODES"); do
-    TOKEN=$(openssl rand -hex 32)
+    TOKEN=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')
     # Store token for sentinel config generation
     echo "$TOKEN" > "${RUN_DIR}/.token-${i}"
 

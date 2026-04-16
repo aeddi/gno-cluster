@@ -5,14 +5,15 @@ Spin up a local cluster of [gnoland](https://github.com/gnolang/gno) nodes with 
 ## Prerequisites
 
 - Docker and Docker Compose v2
-- bash, jq, curl, openssl, make
+- bash, make, jq
+- curl or wget (for `make status`)
 
 ## Quick Start
 
 ```bash
 # 1. Configure
 cp cluster.env.example cluster.env              # edit if needed (defaults work for 4 nodes)
-cp config.overrides.example config.overrides     # optional: customize node settings
+cp config.overrides.example config.overrides    # optional: customize node settings
 
 # 2. Build Docker images
 make build

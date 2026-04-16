@@ -19,6 +19,33 @@ gnoland_run() {
     docker run --rm --entrypoint gnoland "$@"
 }
 
+# Extracts a JSON string value by key from stdin. Handles "key":"val" and "key": "val".
+# Usage: echo "$json" | json_val <key>
+json_val() {
+    local key="$1"
+    grep -o "\"${key}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 \
+        | sed "s/\"${key}\"[[:space:]]*:[[:space:]]*\"//;s/\"$//"
+}
+
+# HTTP GET with curl→wget fallback.
+http_get() {
+    local url="$1"
+    if command -v curl >/dev/null 2>&1; then
+        curl -sf --max-time 2 "$url" 2>/dev/null
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- --timeout=2 "$url" 2>/dev/null
+    else
+        echo "Error: neither curl nor wget is installed." >&2
+        echo "  Install one of them to use 'make status'." >&2
+        return 1
+    fi
+}
+
+# Generates 32 bytes of random hex. Uses /dev/urandom (POSIX).
+rand_hex() {
+    od -An -tx1 -N32 /dev/urandom | tr -d ' \n'
+}
+
 require_current_run() {
     if [[ ! -L "$CURRENT_LINK" ]]; then
         echo "Error: no active run (runs/current does not exist)."
@@ -32,17 +59,18 @@ is_running() {
     docker compose -f "$compose_file" ps --status running -q 2>/dev/null | grep -q .
 }
 
-# Retrieves address, pubkey, and node_id for a given node index.
+# Retrieves address, pubkey, and node_id for a given node index using gnoland secrets get -raw.
 # Sets variables: _addr, _pubkey, _node_id
 get_node_info() {
     local idx="$1"
-    local val_info
-    val_info=$(gnoland_run \
+    _addr=$(gnoland_run \
         -v "${PROJECT_ROOT}/secrets/node-${idx}:/gnoland-data" \
         "$GNOLAND_IMAGE" \
-        secrets get validator_key --data-dir /gnoland-data 2>/dev/null)
-    _addr=$(echo "$val_info" | jq -r '.address')
-    _pubkey=$(echo "$val_info" | jq -r '.pub_key')
+        secrets get validator_key.address -raw --data-dir /gnoland-data 2>/dev/null)
+    _pubkey=$(gnoland_run \
+        -v "${PROJECT_ROOT}/secrets/node-${idx}:/gnoland-data" \
+        "$GNOLAND_IMAGE" \
+        secrets get validator_key.pub_key -raw --data-dir /gnoland-data 2>/dev/null)
     _node_id=$(cat "secrets/node-${idx}/node_id" 2>/dev/null || echo "unknown")
 }
 
@@ -136,8 +164,7 @@ cmd_init() {
         node_id=$(gnoland_run \
             -v "${PROJECT_ROOT}/secrets/node-${i}:/gnoland-data" \
             "$GNOLAND_IMAGE" \
-            secrets get node_id --data-dir /gnoland-data 2>/dev/null \
-            | jq -r '.id')
+            secrets get node_id.id -raw --data-dir /gnoland-data 2>/dev/null)
         echo "$node_id" > "secrets/node-${i}/node_id"
     done
 
@@ -321,17 +348,17 @@ cmd_status() {
     for i in $(seq 1 "$nodes"); do
         local port=$((rpc_base + i - 1))
         local result
-        result=$(curl -s --max-time 2 "http://localhost:${port}/status" 2>/dev/null) || true
+        result=$(http_get "http://localhost:${port}/status") || true
 
         if [[ -z "$result" ]]; then
             printf "%-10s %-12s %-8s %-24s %s\n" "node-${i}" "unreachable" "-" "-" "-"
         else
-            local height block_time net_info num_peers
-            height=$(echo "$result" | jq -r '.result.sync_info.latest_block_height // "?"')
-            block_time=$(echo "$result" | jq -r '.result.sync_info.latest_block_time // "?"' | cut -c1-19)
-            net_info=$(curl -s --max-time 2 "http://localhost:${port}/net_info" 2>/dev/null) || true
-            num_peers=$(echo "$net_info" | jq -r '.result.n_peers // "?"')
-            printf "%-10s %-12s %-8s %-24s %s\n" "node-${i}" "running" "$height" "$block_time" "$num_peers"
+            local height block_time num_peers net_info
+            height=$(echo "$result" | json_val "latest_block_height")
+            block_time=$(echo "$result" | json_val "latest_block_time" | cut -c1-19)
+            net_info=$(http_get "http://localhost:${port}/net_info") || true
+            num_peers=$(echo "$net_info" | json_val "n_peers")
+            printf "%-10s %-12s %-8s %-24s %s\n" "node-${i}" "running" "${height:-?}" "${block_time:-?}" "${num_peers:-?}"
         fi
     done
 }
