@@ -11,7 +11,8 @@ Spin up a local cluster of [gnoland](https://github.com/gnolang/gno) nodes with 
 
 ```bash
 # 1. Configure
-cp cluster.env.example cluster.env    # edit if needed (defaults work for 4 nodes)
+cp cluster.env.example cluster.env              # edit if needed (defaults work for 4 nodes)
+cp config.overrides.example config.overrides     # optional: customize node settings
 
 # 2. Build Docker images
 make build
@@ -24,7 +25,7 @@ make init
 cp /path/to/your/genesis.json .
 
 # 5. Start the cluster
-make up
+make start
 ```
 
 Check that everything is running:
@@ -51,14 +52,13 @@ Open Grafana at [http://localhost:3000](http://localhost:3000) (anonymous access
 | `make help` | Show available commands |
 | `make build` | Build gnoland, watchtower, and sentinel Docker images |
 | `make init` | Generate node secrets (validator keys, node IDs) |
-| `make up` | Start a new cluster or resume a stopped one |
-| `make down` | Stop the cluster (data is preserved in the run folder) |
+| `make start` | Start a new cluster or resume a stopped one |
+| `make stop` | Stop the cluster (data is preserved in the run folder) |
 | `make status` | Show each node's block height, peer count, and status |
 | `make logs svc=node-1` | Follow logs for a specific service |
-| `make print-infos` | Print node addresses, pubkeys, ports, and IDs |
+| `make infos` | Print node addresses, pubkeys, ports, and IDs |
 | `make clone` | Duplicate the current run with fresh chain state |
 | `make update` | Rebuild images and restart the cluster |
-| `make test` | Run unit tests |
 
 ## Configuration
 
@@ -107,6 +107,8 @@ Rules:
 
 Three topologies are available, controlling which nodes can communicate over P2P.
 
+![](.topology.svg)
+
 **mesh** (default) — every node connects to every other node.
 
 **star** — node-1 is the hub; all other nodes connect only through node-1.
@@ -117,7 +119,7 @@ Topology is enforced at the Docker network level: each allowed link gets its own
 
 ## Runs
 
-Each `make up` creates a self-contained **run folder** under `runs/` with a descriptive name:
+Each `make start` creates a self-contained **run folder** under `runs/` with a descriptive name:
 
 ```
 runs/2026-04-16_12-53-57_gnolang-gno_master_4-nodes_4-vals_9-bals_78-txs/
@@ -127,9 +129,9 @@ The folder contains snapshots of all configs, generated compose and monitoring c
 
 ### Lifecycle
 
-- `make up` — creates a fresh run, or resumes the current one if stopped
-- `make up run=<folder>` — resume a specific past run
-- `make down` — stops the cluster; all data is preserved in the run folder
+- `make start` — creates a fresh run, or resumes the current one if stopped
+- `make start run=<folder>` — resume a specific past run
+- `make stop` — stops the cluster; all data is preserved in the run folder
 - `make clone` — duplicate the current run with fresh chain state (same keys, same configs, empty blockchain). Useful for restarting the same setup without regenerating keys or genesis.
 
 ### What clone preserves
@@ -145,7 +147,7 @@ The folder contains snapshots of all configs, generated compose and monitoring c
 
 ## Architecture
 
-For a 4-node mesh cluster, `make up` creates:
+For a 4-node mesh cluster, `make start` creates:
 
 - **4 gnoland nodes** (`node-1` .. `node-4`) — blockchain nodes with RPC and P2P
 - **4 sentinels** (`sentinel-1` .. `sentinel-4`) — one per node, collects RPC data, logs, and resource metrics

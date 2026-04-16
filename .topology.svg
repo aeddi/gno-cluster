@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 340" font-family="monospace" font-size="12">
+  <!-- ---- Mesh ---- -->
+  <text x="150" y="22" text-anchor="middle" font-size="14" font-weight="bold">mesh</text>
+  <!-- Links (drawn first so nodes sit on top) -->
+  <line x1="150" y1="60"  x2="60"  y2="140" stroke="#888" stroke-width="1.5"/>
+  <line x1="150" y1="60"  x2="240" y2="140" stroke="#888" stroke-width="1.5"/>
+  <line x1="60"  y1="140" x2="240" y2="140" stroke="#888" stroke-width="1.5"/>
+  <line x1="60"  y1="140" x2="60"  y2="240" stroke="#888" stroke-width="1.5"/>
+  <line x1="60"  y1="140" x2="240" y2="240" stroke="#888" stroke-width="1.5"/>
+  <line x1="240" y1="140" x2="60"  y2="240" stroke="#888" stroke-width="1.5"/>
+  <line x1="240" y1="140" x2="240" y2="240" stroke="#888" stroke-width="1.5"/>
+  <line x1="60"  y1="240" x2="240" y2="240" stroke="#888" stroke-width="1.5"/>
+  <line x1="60"  y1="240" x2="150" y2="310" stroke="#888" stroke-width="1.5"/>
+  <line x1="240" y1="240" x2="150" y2="310" stroke="#888" stroke-width="1.5"/>
+  <line x1="150" y1="60"  x2="60"  y2="240" stroke="#888" stroke-width="1.5"/>
+  <line x1="150" y1="60"  x2="240" y2="240" stroke="#888" stroke-width="1.5"/>
+  <line x1="150" y1="60"  x2="150" y2="310" stroke="#888" stroke-width="1.5"/>
+  <line x1="60"  y1="140" x2="150" y2="310" stroke="#888" stroke-width="1.5"/>
+  <line x1="240" y1="140" x2="150" y2="310" stroke="#888" stroke-width="1.5"/>
+  <!-- Nodes -->
+  <circle cx="150" cy="60"  r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="150" y="65" text-anchor="middle" fill="white" font-size="10" font-weight="bold">1</text>
+  <circle cx="60"  cy="140" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="60"  y="145" text-anchor="middle" fill="white" font-size="10" font-weight="bold">2</text>
+  <circle cx="240" cy="140" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="240" y="145" text-anchor="middle" fill="white" font-size="10" font-weight="bold">3</text>
+  <circle cx="60"  cy="240" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="60"  y="245" text-anchor="middle" fill="white" font-size="10" font-weight="bold">4</text>
+  <circle cx="240" cy="240" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="240" y="245" text-anchor="middle" fill="white" font-size="10" font-weight="bold">5</text>
+  <circle cx="150" cy="310" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="150" y="315" text-anchor="middle" fill="white" font-size="10" font-weight="bold">6</text>
+
+  <!-- ---- Star ---- -->
+  <text x="450" y="22" text-anchor="middle" font-size="14" font-weight="bold">star</text>
+  <!-- Links -->
+  <line x1="450" y1="185" x2="450" y2="60"  stroke="#888" stroke-width="1.5"/>
+  <line x1="450" y1="185" x2="360" y2="120" stroke="#888" stroke-width="1.5"/>
+  <line x1="450" y1="185" x2="540" y2="120" stroke="#888" stroke-width="1.5"/>
+  <line x1="450" y1="185" x2="360" y2="260" stroke="#888" stroke-width="1.5"/>
+  <line x1="450" y1="185" x2="540" y2="260" stroke="#888" stroke-width="1.5"/>
+  <!-- Nodes -->
+  <circle cx="450" cy="185" r="18" fill="#ff6b4a" stroke="#cf3a2a" stroke-width="2"/>
+  <text x="450" y="190" text-anchor="middle" fill="white" font-size="10" font-weight="bold">1</text>
+  <circle cx="450" cy="60"  r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="450" y="65"  text-anchor="middle" fill="white" font-size="10" font-weight="bold">2</text>
+  <circle cx="360" cy="120" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="360" y="125" text-anchor="middle" fill="white" font-size="10" font-weight="bold">3</text>
+  <circle cx="540" cy="120" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="540" y="125" text-anchor="middle" fill="white" font-size="10" font-weight="bold">4</text>
+  <circle cx="360" cy="260" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="360" y="265" text-anchor="middle" fill="white" font-size="10" font-weight="bold">5</text>
+  <circle cx="540" cy="260" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="540" y="265" text-anchor="middle" fill="white" font-size="10" font-weight="bold">6</text>
+
+  <!-- ---- Ring ---- -->
+  <text x="750" y="22" text-anchor="middle" font-size="14" font-weight="bold">ring</text>
+  <!-- Links -->
+  <line x1="750" y1="60"  x2="660" y2="140" stroke="#888" stroke-width="1.5"/>
+  <line x1="660" y1="140" x2="660" y2="250" stroke="#888" stroke-width="1.5"/>
+  <line x1="660" y1="250" x2="750" y2="310" stroke="#888" stroke-width="1.5"/>
+  <line x1="750" y1="310" x2="840" y2="250" stroke="#888" stroke-width="1.5"/>
+  <line x1="840" y1="250" x2="840" y2="140" stroke="#888" stroke-width="1.5"/>
+  <line x1="840" y1="140" x2="750" y2="60"  stroke="#888" stroke-width="1.5"/>
+  <!-- Nodes -->
+  <circle cx="750" cy="60"  r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="750" y="65"  text-anchor="middle" fill="white" font-size="10" font-weight="bold">1</text>
+  <circle cx="660" cy="140" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="660" y="145" text-anchor="middle" fill="white" font-size="10" font-weight="bold">2</text>
+  <circle cx="660" cy="250" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="660" y="255" text-anchor="middle" fill="white" font-size="10" font-weight="bold">3</text>
+  <circle cx="750" cy="310" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="750" y="315" text-anchor="middle" fill="white" font-size="10" font-weight="bold">4</text>
+  <circle cx="840" cy="250" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="840" y="255" text-anchor="middle" fill="white" font-size="10" font-weight="bold">5</text>
+  <circle cx="840" cy="140" r="16" fill="#4a9eff" stroke="#2a6ecf" stroke-width="2"/>
+  <text x="840" y="145" text-anchor="middle" fill="white" font-size="10" font-weight="bold">6</text>
+</svg>

@@ -2,7 +2,7 @@
 # internal/scripts/cluster.sh — Main entry point for gno-cluster operations.
 #
 # Usage: cluster.sh <command> [args]
-# Commands: help, build, init, up, down, clone, status, logs, print-infos, update
+# Commands: build, init, start, stop, clone, status, logs, infos, update
 #
 # Expects environment variables (set by Makefile or cluster.env):
 #   PROJECT_ROOT, GNO_VERSION, GNO_REPO, WATCHTOWER_VERSION, WATCHTOWER_REPO,
@@ -150,12 +150,12 @@ cmd_init() {
         printf "  %-12s %-44s %-96s %s\n" "node-${i}" "$_addr" "$_pubkey" "$_node_id"
     done
     echo ""
-    echo "==> Provide your genesis.json, then run 'make up'"
+    echo "==> Provide your genesis.json, then run 'make start'"
 }
 
-# ---- Up
+# ---- Start
 
-cmd_up() {
+cmd_start() {
     local run_arg="${1:-}"
 
     # Resume a specific run by name
@@ -202,7 +202,7 @@ cmd_up() {
         current=$(readlink "$CURRENT_LINK")
         if is_running "${current}/docker-compose.yml"; then
             echo "Cluster is already running ($(basename "$current"))."
-            echo "  Run 'make down' first, or 'make up run=<folder>' to switch."
+            echo "  Run 'make stop' first, or 'make start run=<folder>' to switch."
             return
         fi
         echo "==> Resuming stopped run: $(basename "$current")"
@@ -218,9 +218,9 @@ cmd_up() {
         "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$GRAFANA_PORT"
 }
 
-# ---- Down
+# ---- Stop
 
-cmd_down() {
+cmd_stop() {
     local current
     current=$(require_current_run)
     echo "==> Stopping run: $(basename "$current")"
@@ -298,7 +298,7 @@ cmd_clone() {
     mkdir -p "${new_dir}/victoria-data" "${new_dir}/loki-data" "${new_dir}/grafana-data"
 
     ln -sfn "$new_dir" "$CURRENT_LINK"
-    echo "==> Cloned. Run 'make up' to start."
+    echo "==> Cloned. Run 'make start' to start."
 }
 
 # ---- Status
@@ -350,9 +350,9 @@ cmd_logs() {
     docker compose -f "${current}/docker-compose.yml" logs -f "$svc"
 }
 
-# ---- Print Infos
+# ---- Infos
 
-cmd_print_infos() {
+cmd_infos() {
     if [[ ! -d secrets ]]; then
         echo "Error: secrets/ not found. Run 'make init' first."
         exit 1
@@ -386,19 +386,19 @@ cmd_update() {
 
 # ---- Dispatch
 
-command="${1:?Usage: cluster.sh <command> (build|init|up|down|clone|status|logs|print-infos|update)}"
+command="${1:?Usage: cluster.sh <command> (build|init|start|stop|clone|status|logs|infos|update)}"
 shift || true
 
 case "$command" in
-    build)       cmd_build ;;
-    init)        cmd_init ;;
-    up)          cmd_up "$@" ;;
-    down)        cmd_down ;;
-    clone)       cmd_clone "$@" ;;
-    status)      cmd_status ;;
-    logs)        cmd_logs "$@" ;;
-    print-infos) cmd_print_infos ;;
-    update)      cmd_update ;;
+    build)   cmd_build ;;
+    init)    cmd_init ;;
+    start)   cmd_start "$@" ;;
+    stop)    cmd_stop ;;
+    clone)   cmd_clone "$@" ;;
+    status)  cmd_status ;;
+    logs)    cmd_logs "$@" ;;
+    infos)   cmd_infos ;;
+    update)  cmd_update ;;
     *)
         echo "Unknown command: ${command}"
         echo "Run 'make help' for usage."
