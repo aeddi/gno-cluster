@@ -12,7 +12,7 @@ WATCHTOWER_REPO     ?= gnolang/val-companion
 NUM_NODES           ?= 4
 TOPOLOGY            ?= mesh
 GNOLAND_RPC_PORT_BASE ?= 26657
-GNOLAND_P2P_PORT_BASE ?= 26660
+GNOLAND_P2P_PORT_BASE ?= 26670
 GRAFANA_PORT        ?= 3000
 
 # ---- Paths
