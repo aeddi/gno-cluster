@@ -1,0 +1,33 @@
+[server]
+url   = "http://watchtower:8080"
+token = "__TOKEN__"
+
+[rpc]
+enabled       = true
+poll_interval = "3s"
+rpc_url       = "http://node-__N__:26657"
+
+[logs]
+enabled        = true
+source         = "docker"
+container_name = "node-__N__"
+batch_size     = "1MB"
+batch_timeout  = "5s"
+min_level      = "debug"
+
+[otlp]
+enabled     = true
+listen_addr = "0.0.0.0:4317"
+
+[resources]
+enabled        = true
+poll_interval  = "10s"
+source         = "docker"
+container_name = "node-__N__"
+
+[metadata]
+enabled            = true
+check_interval     = "10m"
+binary_version_cmd = "docker exec node-__N__ gnoland version"
+config_get_cmd     = "docker exec node-__N__ gnoland config get %s --data-dir /gnoland-data"
+genesis_path       = "/genesis.json"
