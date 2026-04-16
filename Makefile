@@ -82,14 +82,15 @@ init:
 			echo "  node-$$i: generating secrets..."; \
 			mkdir -p "secrets/node-$$i"; \
 			$(GNOLAND_RUN) \
-				-v "$(PROJECT_ROOT)/secrets/node-$$i:/gnoland-data/secrets" \
+				-v "$(PROJECT_ROOT)/secrets/node-$$i:/gnoland-data" \
 				gno-cluster-gnoland:latest \
 				secrets init --data-dir /gnoland-data; \
 			echo "  node-$$i: extracting node ID..."; \
 			NODE_ID=$$($(GNOLAND_RUN) \
-				-v "$(PROJECT_ROOT)/secrets/node-$$i:/gnoland-data/secrets" \
+				-v "$(PROJECT_ROOT)/secrets/node-$$i:/gnoland-data" \
 				gno-cluster-gnoland:latest \
-				secrets get node_id --data-dir /gnoland-data 2>&1 | tail -1); \
+				secrets get node_id --data-dir /gnoland-data 2>/dev/null \
+				| jq -r '.id'); \
 			echo "$$NODE_ID" > "secrets/node-$$i/node_id"; \
 		fi; \
 	done
