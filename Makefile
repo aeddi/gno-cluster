@@ -7,7 +7,7 @@ SHELL := /bin/bash
 # ---- Defaults
 GNO_VERSION         ?= master
 GNO_REPO            ?= gnolang/gno
-WATCHTOWER_VERSION  ?= master
+WATCHTOWER_VERSION  ?= main
 WATCHTOWER_REPO     ?= gnolang/val-companion
 NUM_NODES           ?= 4
 TOPOLOGY            ?= mesh
