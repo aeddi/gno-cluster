@@ -52,6 +52,23 @@ build_peer_string() {
     echo "$peers_str"
 }
 
+# ---- replace_placeholder <file> <placeholder> <replacement_file>
+# Replaces a line containing <placeholder> with the contents of <replacement_file>.
+# Works on both macOS and Linux by avoiding multi-line sed/awk -v strings.
+replace_placeholder() {
+    local file="$1" placeholder="$2" replacement_file="$3"
+    local tmp
+    tmp=$(mktemp)
+    while IFS= read -r line; do
+        if [[ "$line" == *"$placeholder"* ]]; then
+            cat "$replacement_file"
+        else
+            echo "$line"
+        fi
+    done < "$file" > "$tmp"
+    mv "$tmp" "$file"
+}
+
 # ---- Header (shared services)
 sed "s/__GRAFANA_PORT__/${GRAFANA_PORT}/g" \
     "${TEMPLATES_DIR}/docker-compose-header.yml.tmpl" > "$COMPOSE_FILE"
@@ -63,12 +80,12 @@ for i in $(seq 1 "$NUM_NODES"); do
     PEERS=$(build_peer_string "$i")
 
     # Build network list for this node's topology connections
-    NODE_NETS=""
+    TMPNETS=$(mktemp)
     for net in $(get_node_networks "$TOPOLOGY" "$NUM_NODES" "$i"); do
-        NODE_NETS+="      - ${net}"$'\n'
+        echo "      - ${net}" >> "$TMPNETS"
     done
 
-    # Substitute placeholders — use a temp file for multi-line __NODE_NETWORKS__
+    # Substitute simple placeholders
     TMPNODE=$(mktemp)
     sed -e "s/__N__/${i}/g" \
         -e "s/__RPC_PORT__/${RPC_PORT}/g" \
@@ -76,28 +93,33 @@ for i in $(seq 1 "$NUM_NODES"); do
         -e "s|__PEERS__|${PEERS}|g" \
         "${TEMPLATES_DIR}/docker-compose-node.yml.tmpl" > "$TMPNODE"
 
-    # Replace __NODE_NETWORKS__ with actual network lines using awk
-    awk -v nets="$NODE_NETS" '{gsub(/__NODE_NETWORKS__/, nets); print}' \
-        "$TMPNODE" >> "$COMPOSE_FILE"
-    rm -f "$TMPNODE"
+    # Replace multi-line __NODE_NETWORKS__ placeholder
+    replace_placeholder "$TMPNODE" "__NODE_NETWORKS__" "$TMPNETS"
+
+    cat "$TMPNODE" >> "$COMPOSE_FILE"
+    rm -f "$TMPNODE" "$TMPNETS"
 
     echo "    Added node-${i} + sentinel-${i}"
 done
 
-# ---- Networks section
-SIDECAR_NETS=""
+# ---- Networks section: build sidecar and topology network definitions
+TMPSIDECAR=$(mktemp)
 for i in $(seq 1 "$NUM_NODES"); do
-    SIDECAR_NETS+="  sidecar-${i}:"$'\n'"    driver: bridge"$'\n'
+    echo "  sidecar-${i}:" >> "$TMPSIDECAR"
+    echo "    driver: bridge" >> "$TMPSIDECAR"
 done
 
-TOPO_NETS=""
+TMPTOPO=$(mktemp)
 while IFS=' ' read -r net _a _b; do
-    TOPO_NETS+="  ${net}:"$'\n'"    driver: bridge"$'\n'
+    echo "  ${net}:" >> "$TMPTOPO"
+    echo "    driver: bridge" >> "$TMPTOPO"
 done < <(get_networks "$TOPOLOGY" "$NUM_NODES")
 
-# Replace network placeholders using awk (sed can't handle multi-line on macOS)
-awk -v sidecars="$SIDECAR_NETS" -v topos="$TOPO_NETS" \
-    '{gsub(/__SIDECAR_NETWORKS__/, sidecars); gsub(/__TOPOLOGY_NETWORKS__/, topos); print}' \
-    "${TEMPLATES_DIR}/docker-compose-networks.yml.tmpl" >> "$COMPOSE_FILE"
+# Start from template, replace placeholders
+cp "${TEMPLATES_DIR}/docker-compose-networks.yml.tmpl" "${COMPOSE_FILE}.nets"
+replace_placeholder "${COMPOSE_FILE}.nets" "__SIDECAR_NETWORKS__" "$TMPSIDECAR"
+replace_placeholder "${COMPOSE_FILE}.nets" "__TOPOLOGY_NETWORKS__" "$TMPTOPO"
+cat "${COMPOSE_FILE}.nets" >> "$COMPOSE_FILE"
+rm -f "${COMPOSE_FILE}.nets" "$TMPSIDECAR" "$TMPTOPO"
 
 echo "  docker-compose.yml generated."
