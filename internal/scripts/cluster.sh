@@ -1,0 +1,394 @@
+#!/usr/bin/env bash
+# internal/scripts/cluster.sh — Main entry point for gno-cluster operations.
+#
+# Usage: cluster.sh <command> [args]
+# Commands: build, init, up, down, clone, status, logs, print-infos, update
+#
+# Expects environment variables (set by Makefile or cluster.env):
+#   PROJECT_ROOT, GNO_VERSION, GNO_REPO, WATCHTOWER_VERSION, WATCHTOWER_REPO,
+#   NUM_NODES, TOPOLOGY, GNOLAND_RPC_PORT_BASE, GNOLAND_P2P_PORT_BASE, GRAFANA_PORT
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CURRENT_LINK="${PROJECT_ROOT}/runs/current"
+GNOLAND_IMAGE="gno-cluster-gnoland:latest"
+
+# ---- Helpers
+
+gnoland_run() {
+    docker run --rm --entrypoint gnoland "$@"
+}
+
+# Returns the compose file path for the current run, or exits with an error.
+require_current_run() {
+    if [[ ! -L "$CURRENT_LINK" ]]; then
+        echo "Error: no active run (runs/current does not exist)."
+        exit 1
+    fi
+    readlink "$CURRENT_LINK"
+}
+
+# Returns true if the given compose file has running containers.
+is_running() {
+    local compose_file="$1"
+    docker compose -f "$compose_file" ps --status running -q 2>/dev/null | grep -q .
+}
+
+# ---- Build
+
+cmd_build() {
+    echo "==> Resolving versions to commit hashes..."
+
+    local gno_commit wt_commit build_date
+    gno_commit=$(git ls-remote "https://github.com/${GNO_REPO}.git" "${GNO_VERSION}" | head -1 | cut -f1)
+    if [[ -z "$gno_commit" ]]; then
+        echo "Error: could not resolve GNO_VERSION='${GNO_VERSION}' from ${GNO_REPO}"
+        exit 1
+    fi
+
+    wt_commit=$(git ls-remote "https://github.com/${WATCHTOWER_REPO}.git" "${WATCHTOWER_VERSION}" | head -1 | cut -f1)
+    if [[ -z "$wt_commit" ]]; then
+        echo "Error: could not resolve WATCHTOWER_VERSION='${WATCHTOWER_VERSION}' from ${WATCHTOWER_REPO}"
+        exit 1
+    fi
+
+    build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    echo "  gno:        ${GNO_REPO}@${GNO_VERSION} -> ${gno_commit:0:12}"
+    echo "  watchtower: ${WATCHTOWER_REPO}@${WATCHTOWER_VERSION} -> ${wt_commit:0:12}"
+    echo ""
+
+    echo "==> Building gnoland image..."
+    docker build -f internal/Dockerfile \
+        --target gnoland \
+        --build-arg GNO_REPO="${GNO_REPO}" \
+        --build-arg GNO_COMMIT_HASH="${gno_commit}" \
+        --build-arg GNO_VERSION="${GNO_VERSION}" \
+        --build-arg BUILD_DATE="${build_date}" \
+        -t gno-cluster-gnoland:latest .
+    echo ""
+
+    echo "==> Building watchtower image..."
+    docker build -f internal/Dockerfile \
+        --target watchtower \
+        --build-arg WATCHTOWER_REPO="${WATCHTOWER_REPO}" \
+        --build-arg WATCHTOWER_COMMIT_HASH="${wt_commit}" \
+        --build-arg WATCHTOWER_VERSION="${WATCHTOWER_VERSION}" \
+        --build-arg BUILD_DATE="${build_date}" \
+        -t gno-cluster-watchtower:latest .
+    echo ""
+
+    echo "==> Building sentinel image..."
+    docker build -f internal/Dockerfile \
+        --target sentinel \
+        --build-arg WATCHTOWER_REPO="${WATCHTOWER_REPO}" \
+        --build-arg WATCHTOWER_COMMIT_HASH="${wt_commit}" \
+        --build-arg WATCHTOWER_VERSION="${WATCHTOWER_VERSION}" \
+        --build-arg BUILD_DATE="${build_date}" \
+        -t gno-cluster-sentinel:latest .
+    echo ""
+
+    echo "==> Build complete."
+}
+
+# ---- Init
+
+cmd_init() {
+    echo "==> Initializing secrets for ${NUM_NODES} nodes..."
+    mkdir -p secrets
+
+    for i in $(seq 1 "$NUM_NODES"); do
+        if [[ -d "secrets/node-${i}" ]]; then
+            echo "  node-${i}: secrets exist, skipping"
+            continue
+        fi
+
+        echo "  node-${i}: generating secrets..."
+        mkdir -p "secrets/node-${i}"
+        gnoland_run \
+            -v "${PROJECT_ROOT}/secrets/node-${i}:/gnoland-data" \
+            "$GNOLAND_IMAGE" \
+            secrets init --data-dir /gnoland-data
+
+        echo "  node-${i}: extracting node ID..."
+        local node_id
+        node_id=$(gnoland_run \
+            -v "${PROJECT_ROOT}/secrets/node-${i}:/gnoland-data" \
+            "$GNOLAND_IMAGE" \
+            secrets get node_id --data-dir /gnoland-data 2>/dev/null \
+            | jq -r '.id')
+        echo "$node_id" > "secrets/node-${i}/node_id"
+    done
+
+    echo ""
+    echo "==> Node information:"
+    print_node_table
+    echo ""
+    echo "==> Provide your genesis.json, then run 'make up'"
+}
+
+# ---- Up
+
+cmd_up() {
+    local run_arg="${1:-}"
+
+    # Resume a specific run by name
+    if [[ -n "$run_arg" ]]; then
+        if [[ ! -d "runs/${run_arg}" ]]; then
+            echo "Error: runs/${run_arg} not found."
+            exit 1
+        fi
+        if [[ -L "$CURRENT_LINK" ]]; then
+            local current
+            current=$(readlink "$CURRENT_LINK")
+            if is_running "${current}/docker-compose.yml"; then
+                echo "==> Stopping current run $(basename "$current") first..."
+                docker compose -f "${current}/docker-compose.yml" down
+            fi
+        fi
+        echo "==> Resuming run: ${run_arg}"
+        ln -sfn "${PROJECT_ROOT}/runs/${run_arg}" "$CURRENT_LINK"
+        docker compose -f "${CURRENT_LINK}/docker-compose.yml" up -d
+        echo "==> Run resumed."
+        return
+    fi
+
+    # Check prerequisites for fresh or resumed run
+    if [[ ! -f genesis.json ]]; then
+        echo "Error: genesis.json not found."
+        echo "  Run 'make init' to generate secrets, then provide genesis.json."
+        exit 1
+    fi
+    if [[ ! -d secrets ]]; then
+        echo "Error: secrets/ not found. Run 'make init' first."
+        exit 1
+    fi
+
+    # Resume current run if it exists
+    if [[ -L "$CURRENT_LINK" ]]; then
+        local current
+        current=$(readlink "$CURRENT_LINK")
+        if is_running "${current}/docker-compose.yml"; then
+            echo "Cluster is already running ($(basename "$current"))."
+            echo "  Run 'make down' first, or 'make up run=<folder>' to switch."
+            return
+        fi
+        echo "==> Resuming stopped run: $(basename "$current")"
+        docker compose -f "${current}/docker-compose.yml" up -d
+        echo "==> Run resumed."
+        return
+    fi
+
+    # Create fresh run
+    bash "${SCRIPT_DIR}/create-run.sh" \
+        "$PROJECT_ROOT" "$GNO_REPO" "$GNO_VERSION" \
+        "$NUM_NODES" "$TOPOLOGY" \
+        "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$GRAFANA_PORT"
+}
+
+# ---- Down
+
+cmd_down() {
+    local current
+    current=$(require_current_run)
+    echo "==> Stopping run: $(basename "$current")"
+    docker compose -f "${current}/docker-compose.yml" down
+    echo "==> Stopped. Data preserved in $(basename "$current")/"
+}
+
+# ---- Clone
+
+cmd_clone() {
+    local run_arg="${1:-}"
+    local source_dir
+
+    if [[ -n "$run_arg" ]]; then
+        source_dir="${PROJECT_ROOT}/runs/${run_arg}"
+    elif [[ -L "$CURRENT_LINK" ]]; then
+        source_dir=$(readlink "$CURRENT_LINK")
+    else
+        echo "Error: no active run to clone."
+        exit 1
+    fi
+
+    if [[ ! -d "$source_dir" ]]; then
+        echo "Error: source run not found."
+        exit 1
+    fi
+
+    # Stop source if running
+    if is_running "${source_dir}/docker-compose.yml"; then
+        echo "==> Stopping source run first..."
+        docker compose -f "${source_dir}/docker-compose.yml" down
+    fi
+
+    echo "==> Cloning from: $(basename "$source_dir")"
+
+    # Read metadata from source env
+    source "${SCRIPT_DIR}/parse-genesis.sh"
+    # shellcheck disable=SC1091
+    . "${source_dir}/cluster.env" 2>/dev/null || true
+    eval "$(parse_genesis "${source_dir}/genesis.json")"
+
+    local repo_slug timestamp new_name new_dir nodes
+    repo_slug=$(echo "${GNO_REPO}" | tr '/' '-')
+    nodes="${NUM_NODES}"
+    timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
+    new_name="${timestamp}_${repo_slug}_${GNO_VERSION}_${nodes}-nodes_${validators_count}-vals_${balances_count}-bals_${txs_count}-txs"
+    new_dir="${PROJECT_ROOT}/runs/${new_name}"
+
+    echo "  Creating: ${new_name}"
+    mkdir -p "$new_dir"
+
+    # Copy configs
+    echo "  Copying configs..."
+    for f in genesis.json cluster.env config.overrides docker-compose.yml watchtower.toml loki-config.yml; do
+        if [[ -f "${source_dir}/${f}" ]]; then cp "${source_dir}/${f}" "${new_dir}/${f}"; fi
+    done
+    cp "${source_dir}"/sentinel-*-config.toml "${new_dir}/" 2>/dev/null || true
+    if [[ -d "${source_dir}/grafana-provisioning" ]]; then
+        cp -r "${source_dir}/grafana-provisioning" "${new_dir}/grafana-provisioning"
+    fi
+
+    # Copy secrets, reset chain state
+    echo "  Copying secrets, resetting chain state..."
+    for i in $(seq 1 "$nodes"); do
+        mkdir -p "${new_dir}/gnoland-data-${i}/secrets"
+        cp "${source_dir}/gnoland-data-${i}/secrets/priv_validator_key.json" "${new_dir}/gnoland-data-${i}/secrets/"
+        cp "${source_dir}/gnoland-data-${i}/secrets/node_key.json" "${new_dir}/gnoland-data-${i}/secrets/"
+        printf '{\n  "height": "0",\n  "round": "0",\n  "step": 0\n}\n' \
+            > "${new_dir}/gnoland-data-${i}/secrets/priv_validator_state.json"
+    done
+    mkdir -p "${new_dir}/victoria-data" "${new_dir}/loki-data" "${new_dir}/grafana-data"
+
+    ln -sfn "$new_dir" "$CURRENT_LINK"
+    echo "==> Cloned. Run 'make up' to start."
+}
+
+# ---- Status
+
+cmd_status() {
+    if [[ ! -L "$CURRENT_LINK" ]]; then
+        echo "No active run."
+        return
+    fi
+
+    local current
+    current=$(readlink "$CURRENT_LINK")
+    # shellcheck disable=SC1091
+    . "${current}/cluster.env" 2>/dev/null || true
+
+    local nodes="${NUM_NODES}" rpc_base="${GNOLAND_RPC_PORT_BASE}"
+    printf "%-10s %-12s %-8s %-24s %s\n" "Node" "Status" "Height" "Latest Block" "Peers"
+    printf "%-10s %-12s %-8s %-24s %s\n" "----" "------" "------" "------------" "-----"
+
+    for i in $(seq 1 "$nodes"); do
+        local port=$((rpc_base + i - 1))
+        local result
+        result=$(curl -s --max-time 2 "http://localhost:${port}/status" 2>/dev/null) || true
+
+        if [[ -z "$result" ]]; then
+            printf "%-10s %-12s %-8s %-24s %s\n" "node-${i}" "unreachable" "-" "-" "-"
+        else
+            local height block_time net_info num_peers
+            height=$(echo "$result" | jq -r '.result.sync_info.latest_block_height // "?"')
+            block_time=$(echo "$result" | jq -r '.result.sync_info.latest_block_time // "?"' | cut -c1-19)
+            net_info=$(curl -s --max-time 2 "http://localhost:${port}/net_info" 2>/dev/null) || true
+            num_peers=$(echo "$net_info" | jq -r '.result.n_peers // "?"')
+            printf "%-10s %-12s %-8s %-24s %s\n" "node-${i}" "running" "$height" "$block_time" "$num_peers"
+        fi
+    done
+}
+
+# ---- Logs
+
+cmd_logs() {
+    local svc="${1:-}"
+    if [[ -z "$svc" ]]; then
+        echo "Usage: make logs svc=<service>"
+        echo "  Services: node-1..node-N, sentinel-1..sentinel-N, watchtower, victoria-metrics, loki, grafana"
+        exit 1
+    fi
+    local current
+    current=$(require_current_run)
+    docker compose -f "${current}/docker-compose.yml" logs -f "$svc"
+}
+
+# ---- Print Infos
+
+print_node_table() {
+    printf "  %-12s %-44s %-96s %s\n" "Moniker" "Address" "PubKey" "Node ID"
+    printf "  %-12s %-44s %-96s %s\n" "-------" "-------" "------" "-------"
+
+    for i in $(seq 1 "$NUM_NODES"); do
+        local val_info addr pubkey node_id
+        val_info=$(gnoland_run \
+            -v "${PROJECT_ROOT}/secrets/node-${i}:/gnoland-data" \
+            "$GNOLAND_IMAGE" \
+            secrets get validator_key --data-dir /gnoland-data 2>/dev/null)
+        addr=$(echo "$val_info" | jq -r '.address')
+        pubkey=$(echo "$val_info" | jq -r '.pub_key')
+        node_id=$(cat "secrets/node-${i}/node_id" 2>/dev/null || echo "unknown")
+        printf "  %-12s %-44s %-96s %s\n" "node-${i}" "$addr" "$pubkey" "$node_id"
+    done
+}
+
+cmd_print_infos() {
+    if [[ ! -d secrets ]]; then
+        echo "Error: secrets/ not found. Run 'make init' first."
+        exit 1
+    fi
+
+    echo "==> Node information (${NUM_NODES} nodes, ${TOPOLOGY} topology):"
+    echo ""
+    printf "  %-12s %-44s %-96s %-26s %-8s %s\n" \
+        "Moniker" "Address" "PubKey" "RPC" "P2P" "Node ID"
+    printf "  %-12s %-44s %-96s %-26s %-8s %s\n" \
+        "-------" "-------" "------" "---" "---" "-------"
+
+    for i in $(seq 1 "$NUM_NODES"); do
+        local val_info addr pubkey node_id rpc_port p2p_port
+        val_info=$(gnoland_run \
+            -v "${PROJECT_ROOT}/secrets/node-${i}:/gnoland-data" \
+            "$GNOLAND_IMAGE" \
+            secrets get validator_key --data-dir /gnoland-data 2>/dev/null)
+        addr=$(echo "$val_info" | jq -r '.address')
+        pubkey=$(echo "$val_info" | jq -r '.pub_key')
+        node_id=$(cat "secrets/node-${i}/node_id" 2>/dev/null || echo "unknown")
+        rpc_port=$((GNOLAND_RPC_PORT_BASE + i - 1))
+        p2p_port=$((GNOLAND_P2P_PORT_BASE + i - 1))
+        printf "  %-12s %-44s %-96s http://localhost:%-8s %-8s %s\n" \
+            "node-${i}" "$addr" "$pubkey" "$rpc_port" "$p2p_port" "$node_id"
+    done
+}
+
+# ---- Update
+
+cmd_update() {
+    local current
+    current=$(require_current_run)
+    echo "==> Restarting run: $(basename "$current")"
+    docker compose -f "${current}/docker-compose.yml" up -d --force-recreate
+    echo "==> Updated and restarted."
+}
+
+# ---- Dispatch
+
+command="${1:-}"
+shift || true
+
+case "$command" in
+    build)       cmd_build ;;
+    init)        cmd_init ;;
+    up)          cmd_up "$@" ;;
+    down)        cmd_down ;;
+    clone)       cmd_clone "$@" ;;
+    status)      cmd_status ;;
+    logs)        cmd_logs "$@" ;;
+    print-infos) cmd_print_infos ;;
+    update)      cmd_update ;;
+    *)
+        echo "Usage: cluster.sh <command>"
+        echo "Commands: build, init, up, down, clone, status, logs, print-infos, update"
+        exit 1
+        ;;
+esac
