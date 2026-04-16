@@ -46,7 +46,7 @@ ARG WATCHTOWER_REPO=aeddi/gno-watchtower
 ARG WATCHTOWER_COMMIT_HASH
 ARG WATCHTOWER_VERSION
 
-RUN apk add --no-cache git gcc musl-dev
+RUN apk add --no-cache git gcc musl-dev linux-headers systemd-dev
 
 WORKDIR /src
 RUN git clone "https://github.com/${WATCHTOWER_REPO}.git" . \
