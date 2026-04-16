@@ -236,7 +236,8 @@ status:
 		else \
 			HEIGHT=$$(echo "$$RESULT" | jq -r '.result.sync_info.latest_block_height // "?"'); \
 			BLOCK_TIME=$$(echo "$$RESULT" | jq -r '.result.sync_info.latest_block_time // "?"' | cut -c1-19); \
-			NUM_PEERS=$$(echo "$$RESULT" | jq -r '.result.n_peers // "?"'); \
+			NET_INFO=$$(curl -s --max-time 2 "http://localhost:$$PORT/net_info" 2>/dev/null) || true; \
+			NUM_PEERS=$$(echo "$$NET_INFO" | jq -r '.result.n_peers // "?"'); \
 			printf "%-10s %-12s %-8s %-24s %s\n" "node-$$i" "running" "$$HEIGHT" "$$BLOCK_TIME" "$$NUM_PEERS"; \
 		fi; \
 	done
