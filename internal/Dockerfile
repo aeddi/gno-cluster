@@ -51,8 +51,8 @@ RUN apk add --no-cache git
 WORKDIR /src
 RUN git clone "https://github.com/${WATCHTOWER_REPO}.git" . \
     && git checkout "${WATCHTOWER_COMMIT_HASH:-${WATCHTOWER_VERSION}}"
-RUN go build -o /build/watchtower ./cmd/watchtower \
-    && go build -o /build/sentinel ./cmd/sentinel
+RUN CGO_ENABLED=0 go build -o /build/watchtower ./cmd/watchtower \
+    && CGO_ENABLED=0 go build -o /build/sentinel ./cmd/sentinel
 
 # ---- Watchtower
 FROM alpine:3 AS watchtower
