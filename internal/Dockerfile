@@ -39,20 +39,21 @@ RUN chmod +x /entrypoint.sh /scripts/parse-overrides.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-# ---- Watchtower Builder
-FROM golang:1.25-alpine AS watchtower-builder
+# ---- Watchtower Builder (Debian for systemd/journald headers)
+FROM golang:1.25 AS watchtower-builder
 
 ARG WATCHTOWER_REPO=aeddi/gno-watchtower
 ARG WATCHTOWER_COMMIT_HASH
 ARG WATCHTOWER_VERSION
 
-RUN apk add --no-cache git gcc musl-dev linux-headers systemd-dev
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git libsystemd-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 RUN git clone "https://github.com/${WATCHTOWER_REPO}.git" . \
     && git checkout "${WATCHTOWER_COMMIT_HASH:-${WATCHTOWER_VERSION}}"
-RUN CGO_ENABLED=0 go build -o /build/watchtower ./cmd/watchtower \
-    && CGO_ENABLED=1 go build -o /build/sentinel ./cmd/sentinel
+RUN go build -o /build/watchtower ./cmd/watchtower \
+    && go build -o /build/sentinel ./cmd/sentinel
 
 # ---- Watchtower
 FROM alpine:3 AS watchtower
