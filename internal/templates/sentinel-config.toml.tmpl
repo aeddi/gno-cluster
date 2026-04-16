@@ -29,5 +29,5 @@ container_name = "node-__N__"
 enabled            = true
 check_interval     = "10m"
 binary_version_cmd = "docker exec node-__N__ gnoland version"
-config_get_cmd     = "docker exec node-__N__ gnoland config get %s --data-dir /gnoland-data"
+config_get_cmd     = "docker exec node-__N__ gnoland config get %s -config-path /gnoland-data/config/config.toml"
 genesis_path       = "/genesis.json"

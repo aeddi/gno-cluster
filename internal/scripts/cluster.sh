@@ -2,7 +2,7 @@
 # internal/scripts/cluster.sh — Main entry point for gno-cluster operations.
 #
 # Usage: cluster.sh <command> [args]
-# Commands: build, init, up, down, clone, status, logs, print-infos, update
+# Commands: help, build, init, up, down, clone, status, logs, print-infos, update
 #
 # Expects environment variables (set by Makefile or cluster.env):
 #   PROJECT_ROOT, GNO_VERSION, GNO_REPO, WATCHTOWER_VERSION, WATCHTOWER_REPO,
@@ -19,7 +19,6 @@ gnoland_run() {
     docker run --rm --entrypoint gnoland "$@"
 }
 
-# Returns the compose file path for the current run, or exits with an error.
 require_current_run() {
     if [[ ! -L "$CURRENT_LINK" ]]; then
         echo "Error: no active run (runs/current does not exist)."
@@ -28,10 +27,66 @@ require_current_run() {
     readlink "$CURRENT_LINK"
 }
 
-# Returns true if the given compose file has running containers.
 is_running() {
     local compose_file="$1"
     docker compose -f "$compose_file" ps --status running -q 2>/dev/null | grep -q .
+}
+
+# Retrieves address, pubkey, and node_id for a given node index.
+# Sets variables: _addr, _pubkey, _node_id
+get_node_info() {
+    local idx="$1"
+    local val_info
+    val_info=$(gnoland_run \
+        -v "${PROJECT_ROOT}/secrets/node-${idx}:/gnoland-data" \
+        "$GNOLAND_IMAGE" \
+        secrets get validator_key --data-dir /gnoland-data 2>/dev/null)
+    _addr=$(echo "$val_info" | jq -r '.address')
+    _pubkey=$(echo "$val_info" | jq -r '.pub_key')
+    _node_id=$(cat "secrets/node-${idx}/node_id" 2>/dev/null || echo "unknown")
+}
+
+validate_port_ranges() {
+    local rpc_base="$1" p2p_base="$2" nodes="$3"
+    local rpc_end=$((rpc_base + nodes - 1))
+    if ((rpc_end >= p2p_base)); then
+        echo "Error: RPC port range (${rpc_base}-${rpc_end}) overlaps with P2P base (${p2p_base})."
+        echo "  Increase GNOLAND_P2P_PORT_BASE to at least $((rpc_base + nodes))."
+        exit 1
+    fi
+}
+
+# ---- Help
+
+cmd_help() {
+    cat <<'EOF'
+gno-cluster — spin up a local gnoland cluster with configurable topology and monitoring.
+
+Usage: make <target> [args]
+
+Targets:
+  build          Build Docker images (gnoland, watchtower, sentinel)
+  init           Generate node secrets (keys, node IDs)
+  up             Start a new cluster or resume a stopped one
+  down           Stop the cluster (data is preserved)
+  clone          Duplicate current run with fresh chain state
+  status         Show each node's block height, peers, and status
+  logs           Follow logs for a service (make logs svc=node-1)
+  print-infos    Print node addresses, pubkeys, ports, and IDs
+  update         Rebuild images and restart the cluster
+  test           Run unit tests
+  help           Show this help message
+
+Arguments:
+  make up run=<folder>      Resume a specific past run
+  make clone run=<folder>   Clone a specific past run
+  make logs svc=<service>   Follow logs (node-1..N, sentinel-1..N, watchtower, grafana, loki, victoria-metrics)
+
+Configuration:
+  cluster.env               Environment variables (copy from cluster.env.example)
+  config.overrides          Per-node gnoland config (copy from config.overrides.example)
+  genesis.json              Chain genesis file (user-provided)
+EOF
 }
 
 # ---- Build
@@ -121,7 +176,12 @@ cmd_init() {
 
     echo ""
     echo "==> Node information:"
-    print_node_table
+    printf "  %-12s %-44s %-96s %s\n" "Moniker" "Address" "PubKey" "Node ID"
+    printf "  %-12s %-44s %-96s %s\n" "-------" "-------" "------" "-------"
+    for i in $(seq 1 "$NUM_NODES"); do
+        get_node_info "$i"
+        printf "  %-12s %-44s %-96s %s\n" "node-${i}" "$_addr" "$_pubkey" "$_node_id"
+    done
     echo ""
     echo "==> Provide your genesis.json, then run 'make up'"
 }
@@ -152,7 +212,12 @@ cmd_up() {
         return
     fi
 
-    # Check prerequisites for fresh or resumed run
+    # Check prerequisites
+    if [[ ! -f cluster.env ]]; then
+        echo "Error: cluster.env not found."
+        echo "  Copy cluster.env.example to cluster.env and adjust settings."
+        exit 1
+    fi
     if [[ ! -f genesis.json ]]; then
         echo "Error: genesis.json not found."
         echo "  Run 'make init' to generate secrets, then provide genesis.json."
@@ -162,6 +227,7 @@ cmd_up() {
         echo "Error: secrets/ not found. Run 'make init' first."
         exit 1
     fi
+    validate_port_ranges "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$NUM_NODES"
 
     # Resume current run if it exists
     if [[ -L "$CURRENT_LINK" ]]; then
@@ -223,17 +289,21 @@ cmd_clone() {
 
     echo "==> Cloning from: $(basename "$source_dir")"
 
-    # Read metadata from source env
-    source "${SCRIPT_DIR}/parse-genesis.sh"
-    # shellcheck disable=SC1091
-    . "${source_dir}/cluster.env" 2>/dev/null || true
-    eval "$(parse_genesis "${source_dir}/genesis.json")"
-
-    local repo_slug timestamp new_name new_dir nodes
-    repo_slug=$(echo "${GNO_REPO}" | tr '/' '-')
-    nodes="${NUM_NODES}"
+    # Read metadata from source env (in a subshell to avoid polluting our env)
+    local repo_slug version nodes timestamp new_name new_dir
+    eval "$(
+        source "${SCRIPT_DIR}/parse-genesis.sh"
+        . "${source_dir}/cluster.env" 2>/dev/null || true
+        eval "$(parse_genesis "${source_dir}/genesis.json")"
+        echo "repo_slug=$(echo "${GNO_REPO}" | tr '/' '-')"
+        echo "version=${GNO_VERSION}"
+        echo "nodes=${NUM_NODES}"
+        echo "validators_count=${validators_count}"
+        echo "balances_count=${balances_count}"
+        echo "txs_count=${txs_count}"
+    )"
     timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
-    new_name="${timestamp}_${repo_slug}_${GNO_VERSION}_${nodes}-nodes_${validators_count}-vals_${balances_count}-bals_${txs_count}-txs"
+    new_name="${timestamp}_${repo_slug}_${version}_${nodes}-nodes_${validators_count}-vals_${balances_count}-bals_${txs_count}-txs"
     new_dir="${PROJECT_ROOT}/runs/${new_name}"
 
     echo "  Creating: ${new_name}"
@@ -315,23 +385,6 @@ cmd_logs() {
 
 # ---- Print Infos
 
-print_node_table() {
-    printf "  %-12s %-44s %-96s %s\n" "Moniker" "Address" "PubKey" "Node ID"
-    printf "  %-12s %-44s %-96s %s\n" "-------" "-------" "------" "-------"
-
-    for i in $(seq 1 "$NUM_NODES"); do
-        local val_info addr pubkey node_id
-        val_info=$(gnoland_run \
-            -v "${PROJECT_ROOT}/secrets/node-${i}:/gnoland-data" \
-            "$GNOLAND_IMAGE" \
-            secrets get validator_key --data-dir /gnoland-data 2>/dev/null)
-        addr=$(echo "$val_info" | jq -r '.address')
-        pubkey=$(echo "$val_info" | jq -r '.pub_key')
-        node_id=$(cat "secrets/node-${i}/node_id" 2>/dev/null || echo "unknown")
-        printf "  %-12s %-44s %-96s %s\n" "node-${i}" "$addr" "$pubkey" "$node_id"
-    done
-}
-
 cmd_print_infos() {
     if [[ ! -d secrets ]]; then
         echo "Error: secrets/ not found. Run 'make init' first."
@@ -346,18 +399,11 @@ cmd_print_infos() {
         "-------" "-------" "------" "---" "---" "-------"
 
     for i in $(seq 1 "$NUM_NODES"); do
-        local val_info addr pubkey node_id rpc_port p2p_port
-        val_info=$(gnoland_run \
-            -v "${PROJECT_ROOT}/secrets/node-${i}:/gnoland-data" \
-            "$GNOLAND_IMAGE" \
-            secrets get validator_key --data-dir /gnoland-data 2>/dev/null)
-        addr=$(echo "$val_info" | jq -r '.address')
-        pubkey=$(echo "$val_info" | jq -r '.pub_key')
-        node_id=$(cat "secrets/node-${i}/node_id" 2>/dev/null || echo "unknown")
-        rpc_port=$((GNOLAND_RPC_PORT_BASE + i - 1))
-        p2p_port=$((GNOLAND_P2P_PORT_BASE + i - 1))
+        get_node_info "$i"
+        local rpc_port=$((GNOLAND_RPC_PORT_BASE + i - 1))
+        local p2p_port=$((GNOLAND_P2P_PORT_BASE + i - 1))
         printf "  %-12s %-44s %-96s http://localhost:%-8s %-8s %s\n" \
-            "node-${i}" "$addr" "$pubkey" "$rpc_port" "$p2p_port" "$node_id"
+            "node-${i}" "$_addr" "$_pubkey" "$rpc_port" "$p2p_port" "$_node_id"
     done
 }
 
@@ -373,10 +419,11 @@ cmd_update() {
 
 # ---- Dispatch
 
-command="${1:-}"
+command="${1:-help}"
 shift || true
 
 case "$command" in
+    help)        cmd_help ;;
     build)       cmd_build ;;
     init)        cmd_init ;;
     up)          cmd_up "$@" ;;
@@ -387,8 +434,9 @@ case "$command" in
     print-infos) cmd_print_infos ;;
     update)      cmd_update ;;
     *)
-        echo "Usage: cluster.sh <command>"
-        echo "Commands: build, init, up, down, clone, status, logs, print-infos, update"
+        echo "Unknown command: ${command}"
+        echo ""
+        cmd_help
         exit 1
         ;;
 esac

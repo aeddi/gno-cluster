@@ -21,7 +21,11 @@ export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GRAFANA_PO
 
 CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 
-.PHONY: build init up down clone status logs print-infos update
+.DEFAULT_GOAL := help
+.PHONY: help build init up down clone status logs print-infos update test
+
+help:
+	@$(CLUSTER) help
 
 build:
 	@$(CLUSTER) build
@@ -50,3 +54,11 @@ print-infos:
 update:
 	@$(CLUSTER) build
 	@$(CLUSTER) update
+
+test:
+	@echo "==> Running tests..."
+	@bash tests/test_topology.sh
+	@bash tests/test_parse_genesis.sh
+	@bash tests/test_parse_overrides.sh
+	@echo ""
+	@echo "==> All tests passed."

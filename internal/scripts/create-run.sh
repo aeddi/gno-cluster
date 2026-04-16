@@ -20,6 +20,14 @@ SECRETS_DIR="${PROJECT_ROOT}/secrets"
 
 source "${SCRIPTS_DIR}/parse-genesis.sh"
 
+# ---- Validate port ranges
+RPC_END=$((RPC_PORT_BASE + NUM_NODES - 1))
+if ((RPC_END >= P2P_PORT_BASE)); then
+    echo "Error: RPC port range (${RPC_PORT_BASE}-${RPC_END}) overlaps with P2P base (${P2P_PORT_BASE})."
+    echo "  Increase GNOLAND_P2P_PORT_BASE to at least $((RPC_PORT_BASE + NUM_NODES))."
+    exit 1
+fi
+
 # ---- Parse genesis for folder name metadata
 echo "==> Parsing genesis.json..."
 eval "$(parse_genesis "${PROJECT_ROOT}/genesis.json")"

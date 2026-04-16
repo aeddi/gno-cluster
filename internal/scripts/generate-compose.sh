@@ -8,6 +8,10 @@
 # Sources topology.sh for network computation.
 set -euo pipefail
 
+TMPFILES=()
+cleanup() { rm -f "${TMPFILES[@]}"; }
+trap cleanup EXIT
+
 RUN_DIR="$1"
 NUM_NODES="$2"
 TOPOLOGY="$3"
@@ -80,13 +84,13 @@ for i in $(seq 1 "$NUM_NODES"); do
     PEERS=$(build_peer_string "$i")
 
     # Build network list for this node's topology connections
-    TMPNETS=$(mktemp)
+    TMPNETS=$(mktemp); TMPFILES+=("$TMPNETS")
     for net in $(get_node_networks "$TOPOLOGY" "$NUM_NODES" "$i"); do
         echo "      - ${net}" >> "$TMPNETS"
     done
 
     # Substitute simple placeholders
-    TMPNODE=$(mktemp)
+    TMPNODE=$(mktemp); TMPFILES+=("$TMPNODE")
     sed -e "s/__N__/${i}/g" \
         -e "s/__RPC_PORT__/${RPC_PORT}/g" \
         -e "s/__P2P_PORT__/${P2P_PORT}/g" \
@@ -103,13 +107,13 @@ for i in $(seq 1 "$NUM_NODES"); do
 done
 
 # ---- Networks section: build sidecar and topology network definitions
-TMPSIDECAR=$(mktemp)
+TMPSIDECAR=$(mktemp); TMPFILES+=("$TMPSIDECAR")
 for i in $(seq 1 "$NUM_NODES"); do
     echo "  sidecar-${i}:" >> "$TMPSIDECAR"
     echo "    driver: bridge" >> "$TMPSIDECAR"
 done
 
-TMPTOPO=$(mktemp)
+TMPTOPO=$(mktemp); TMPFILES+=("$TMPTOPO")
 while IFS=' ' read -r net _a _b; do
     echo "  ${net}:" >> "$TMPTOPO"
     echo "    driver: bridge" >> "$TMPTOPO"
