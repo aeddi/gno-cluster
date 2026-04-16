@@ -445,7 +445,7 @@ case "$command" in
     start)   cmd_start "$@" ;;
     stop)    cmd_stop ;;
     clone)   cmd_clone "$@" ;;
-    status)  cmd_status ;;
+    status)  cmd_status "$@" ;;
     logs)    cmd_logs "$@" ;;
     infos)   cmd_infos ;;
     update)  cmd_update ;;
