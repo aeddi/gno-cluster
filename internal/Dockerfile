@@ -18,6 +18,7 @@ RUN cd gno.land && go build -o /build/gnoland ./cmd/gnoland
 
 # ---- Gnoland
 FROM alpine:3 AS gnoland
+ENV GNOROOT="/gnoroot"
 
 ARG GNO_COMMIT_HASH
 ARG GNO_VERSION
@@ -32,7 +33,8 @@ LABEL gno.commit="${GNO_COMMIT_HASH}" \
 RUN apk add --no-cache bash jq
 
 COPY --from=gno-builder /build/gnoland /usr/local/bin/gnoland
-COPY --from=gno-builder /src/gnovm/stdlibs /gnovm/stdlibs
+COPY --from=gno-builder /src/gnovm/stdlibs /gnoroot/gnovm/stdlibs
+COPY --from=gno-builder /src/gnovm/tests/stdlibs /gnoroot/gnovm/tests/stdlibs
 COPY internal/scripts/parse-overrides.sh /scripts/parse-overrides.sh
 COPY internal/docker/gnoland-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh /scripts/parse-overrides.sh

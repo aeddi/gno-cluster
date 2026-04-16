@@ -51,5 +51,4 @@ exec gnoland start \
     -log-level debug \
     -log-format json \
     -data-dir /gnoland-data \
-    -genesis /genesis.json \
-    -gnoroot-dir /
+    -genesis /genesis.json
