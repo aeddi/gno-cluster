@@ -14,9 +14,9 @@
 #   logs     svc=<service>    Follow logs for a service
 #   infos                     Print node addresses, pubkeys, ports, and IDs
 #   update                    Rebuild images and restart the cluster
-#   clean-images              Remove all gno-cluster Docker images
+#   clean-imgs              Remove all gno-cluster Docker images
 #   clean-runs    [yes=1]     Remove all run folders (prompts unless yes=1)
-#   clean         [yes=1]     Run clean-runs then clean-images
+#   clean         [yes=1]     Run clean-runs then clean-imgs
 #   help                      Show this help message
 #
 # Configuration:
@@ -46,7 +46,7 @@ export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GRAFANA_PO
 # and better error handling. The Makefile is just a thin wrapper around it.
 CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 
-.PHONY: help build create start stop clone status logs infos update clean clean-runs clean-images
+.PHONY: help build create start stop clone status logs infos update clean clean-runs clean-imgs
 
 help:
 	@awk '/^# Usage:/,/^$$/{sub(/^# ?/,""); print}' $(MAKEFILE_LIST)
@@ -79,8 +79,8 @@ update:
 	@$(CLUSTER) build $(force)
 	@$(CLUSTER) update
 
-clean-images:
-	@$(CLUSTER) clean-images
+clean-imgs:
+	@$(CLUSTER) clean-imgs
 
 clean-runs:
 	@$(CLUSTER) clean-runs $(yes)

@@ -244,7 +244,7 @@ ensure_images_for_run() {
         echo "==> Keeping previously-built images from ${PREV_BUILD_DATE}."
         if ! docker image inspect "$PREV_GNOLAND_IMAGE" >/dev/null 2>&1; then
             echo "Error: previously-pinned image ${PREV_GNOLAND_IMAGE} is not present."
-            echo "  It may have been removed via 'make clean-images' or 'docker image prune'."
+            echo "  It may have been removed via 'make clean-imgs' or 'docker image prune'."
             echo "  Options:"
             echo "    - 'make start upgrade=1' to rebuild with the current state"
             echo "    - 'make clone' first if you want to keep this run intact"
@@ -715,7 +715,7 @@ cmd_update() {
 
 # ---- Clean
 
-cmd_clean_images() {
+cmd_clean_imgs() {
     local images
     images=$(docker images --filter "reference=gno-cluster-*" -q 2>/dev/null | sort -u)
     if [[ -z "$images" ]]; then
@@ -784,12 +784,12 @@ cmd_clean_runs() {
 cmd_clean() {
     local yes="${1:-}"
     cmd_clean_runs "$yes"
-    cmd_clean_images
+    cmd_clean_imgs
 }
 
 # ---- Dispatch
 
-command="${1:?Usage: cluster.sh <command> (build|create|start|stop|clone|status|logs|infos|update|clean|clean-runs|clean-images)}"
+command="${1:?Usage: cluster.sh <command> (build|create|start|stop|clone|status|logs|infos|update|clean|clean-runs|clean-imgs)}"
 shift || true
 
 case "$command" in
@@ -804,7 +804,7 @@ case "$command" in
     update)       cmd_update ;;
     clean)        cmd_clean "$@" ;;
     clean-runs)   cmd_clean_runs "$@" ;;
-    clean-images) cmd_clean_images ;;
+    clean-imgs) cmd_clean_imgs ;;
     *)
         echo "Unknown command: ${command}"
         echo "Run 'make help' for usage."

@@ -59,9 +59,9 @@ Open Grafana at [http://localhost:3000](http://localhost:3000) (anonymous access
 | `make infos` | Print node addresses, pubkeys, ports, and IDs. |
 | `make clone [run=<folder>]` | Duplicate the current (or specified) run with fresh chain state. |
 | `make update [force=1]` | Rebuild images and restart the cluster. |
-| `make clean-images` | Remove all `gno-cluster-*` Docker images. |
+| `make clean-imgs` | Remove all `gno-cluster-*` Docker images. |
 | `make clean-runs [yes=1]` | Remove all run folders. Prompts unless `yes=1`; refuses in non-TTY mode without `yes=1`. |
-| `make clean [yes=1]` | `clean-runs` then `clean-images`. |
+| `make clean [yes=1]` | `clean-runs` then `clean-imgs`. |
 
 ## Configuration
 
