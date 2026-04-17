@@ -56,12 +56,35 @@ rand_hex() {
     od -An -tx1 -N32 /dev/urandom | tr -d ' \n'
 }
 
+# Silent resolution: echoes the current run dir on success, returns non-zero
+# when runs/current is missing or dangling. Use this when the caller has a
+# fallback behavior (e.g. skip a conditional stop-if-running step).
+resolve_current_run() {
+    [[ -L "$CURRENT_LINK" ]] || return 1
+    local d
+    d=$(readlink "$CURRENT_LINK")
+    [[ -d "$d" ]] || return 1
+    echo "$d"
+}
+
+# Strict resolution: prints an actionable error on failure and returns non-zero.
+# Uses `return` (not `exit`) so callers can collect via
+#   current=$(require_current_run) || exit 1
+# (exit from a subshell does not propagate to the parent).
 require_current_run() {
-    if [[ ! -L "$CURRENT_LINK" ]]; then
-        echo "Error: no active run (runs/current does not exist)."
-        exit 1
+    local d
+    if d=$(resolve_current_run); then
+        echo "$d"
+        return 0
     fi
-    readlink "$CURRENT_LINK"
+    if [[ -L "$CURRENT_LINK" ]]; then
+        echo "Error: runs/current points to a missing folder: '$(readlink "$CURRENT_LINK")'." >&2
+        echo "  Remove the dangling symlink: rm runs/current" >&2
+    else
+        echo "Error: no active run (runs/current does not exist)." >&2
+        echo "  Run 'make create' to create one, or 'make start run=<folder>' to resume a past run." >&2
+    fi
+    return 1
 }
 
 is_running() {
@@ -351,14 +374,11 @@ cmd_create() {
     fi
     validate_port_ranges "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$NUM_NODES"
 
-    if [[ -L "$CURRENT_LINK" ]]; then
-        local current
-        current=$(readlink "$CURRENT_LINK")
-        if is_running "${current}/docker-compose.yml"; then
-            echo "Error: a cluster is currently running ($(basename "$current"))."
-            echo "  Run 'make stop' first."
-            exit 1
-        fi
+    local current
+    if current=$(resolve_current_run) && is_running "${current}/docker-compose.yml"; then
+        echo "Error: a cluster is currently running ($(basename "$current"))."
+        echo "  Run 'make stop' first."
+        exit 1
     fi
 
     local interactive=1
@@ -427,7 +447,7 @@ cmd_create() {
 
     # Pin this run's build state so future make start invocations can detect drift.
     local new_run
-    new_run=$(readlink "$CURRENT_LINK")
+    new_run=$(require_current_run) || exit 1
     write_build_state "${new_run}/.build-state"
 
     echo ""
@@ -452,13 +472,10 @@ cmd_start() {
             # shellcheck disable=SC1091
             source "${run_dir}/cluster.env"
         fi
-        if [[ -L "$CURRENT_LINK" ]]; then
-            local current
-            current=$(readlink "$CURRENT_LINK")
-            if is_running "${current}/docker-compose.yml"; then
-                echo "==> Stopping current run $(basename "$current") first..."
-                docker compose -f "${current}/docker-compose.yml" down
-            fi
+        local current
+        if current=$(resolve_current_run) && is_running "${current}/docker-compose.yml"; then
+            echo "==> Stopping current run $(basename "$current") first..."
+            docker compose -f "${current}/docker-compose.yml" down
         fi
         resolve_commits
         ensure_images_for_run "$run_dir"
@@ -471,14 +488,8 @@ cmd_start() {
     fi
 
     # Start the current run (must already exist)
-    if [[ ! -L "$CURRENT_LINK" ]]; then
-        echo "Error: no current run to start."
-        echo "  Run 'make create' to create a new cluster,"
-        echo "  or 'make start run=<folder>' to start a specific past run."
-        exit 1
-    fi
     local current
-    current=$(readlink "$CURRENT_LINK")
+    current=$(require_current_run) || exit 1
     if is_running "${current}/docker-compose.yml"; then
         echo "Cluster is already running ($(basename "$current"))."
         echo "  Run 'make stop' first, or 'make start run=<folder>' to switch."
@@ -500,7 +511,7 @@ cmd_start() {
 
 cmd_stop() {
     local current
-    current=$(require_current_run)
+    current=$(require_current_run) || exit 1
     echo "==> Stopping run: $(basename "$current")"
     docker compose -f "${current}/docker-compose.yml" down
     echo "==> Stopped. Data preserved in $(basename "$current")/"
@@ -514,16 +525,12 @@ cmd_clone() {
 
     if [[ -n "$run_arg" ]]; then
         source_dir="${PROJECT_ROOT}/runs/${run_arg}"
-    elif [[ -L "$CURRENT_LINK" ]]; then
-        source_dir=$(readlink "$CURRENT_LINK")
+        if [[ ! -d "$source_dir" ]]; then
+            echo "Error: runs/${run_arg} not found." >&2
+            exit 1
+        fi
     else
-        echo "Error: no active run to clone."
-        exit 1
-    fi
-
-    if [[ ! -d "$source_dir" ]]; then
-        echo "Error: source run not found."
-        exit 1
+        source_dir=$(require_current_run) || exit 1
     fi
 
     # Stop source if running
@@ -609,13 +616,11 @@ render_status() {
 }
 
 cmd_status() {
-    if [[ ! -L "$CURRENT_LINK" ]]; then
+    local current
+    if ! current=$(resolve_current_run); then
         echo "No active run."
         return
     fi
-
-    local current
-    current=$(readlink "$CURRENT_LINK")
     # shellcheck disable=SC1091
     . "${current}/cluster.env" 2>/dev/null || true
 
@@ -817,11 +822,8 @@ cmd_infos() {
             echo "Error: runs/${run_arg} not found."
             exit 1
         fi
-    elif [[ -L "$CURRENT_LINK" ]]; then
-        run_dir=$(readlink "$CURRENT_LINK")
     else
-        echo "Error: no current run. Run 'make create' first, or pass run=<folder>."
-        exit 1
+        run_dir=$(require_current_run) || exit 1
     fi
 
     if [[ -f "${run_dir}/cluster.env" ]]; then
@@ -908,13 +910,12 @@ cmd_update() {
     write_build_state "$state_file"
 
     # Switch current to this run if needed (mirrors cmd_start's run= behavior).
-    if [[ -L "$CURRENT_LINK" ]]; then
-        local current
-        current=$(readlink "$CURRENT_LINK")
-        if [[ "$current" != "$run_dir" ]] && is_running "${current}/docker-compose.yml"; then
-            echo "==> Stopping current run $(basename "$current") first..."
-            docker compose -f "${current}/docker-compose.yml" down
-        fi
+    local current
+    if current=$(resolve_current_run) \
+            && [[ "$current" != "$run_dir" ]] \
+            && is_running "${current}/docker-compose.yml"; then
+        echo "==> Stopping current run $(basename "$current") first..."
+        docker compose -f "${current}/docker-compose.yml" down
     fi
     ln -sfn "$run_dir" "$CURRENT_LINK"
 
@@ -990,13 +991,10 @@ cmd_clean_runs() {
         fi
     fi
 
-    if [[ -L "$CURRENT_LINK" ]]; then
-        local current
-        current=$(readlink "$CURRENT_LINK")
-        if is_running "${current}/docker-compose.yml"; then
-            echo "==> Stopping current run..."
-            docker compose -f "${current}/docker-compose.yml" down
-        fi
+    local current
+    if current=$(resolve_current_run) && is_running "${current}/docker-compose.yml"; then
+        echo "==> Stopping current run..."
+        docker compose -f "${current}/docker-compose.yml" down
     fi
 
     echo "==> Removing ${count} run folder(s)..."
