@@ -2,88 +2,150 @@
 
 Spin up a local cluster of [gnoland](https://github.com/gnolang/gno) nodes with configurable network topology and integrated [watchtower](https://github.com/aeddi/gno-watchtower) monitoring.
 
+Every `make create` produces a self-contained **run folder** under `runs/` (timestamped, kept on disk). A `runs/current` symlink points to whichever run is active. Past runs can be stopped and resumed, cloned (same config and keys with a fresh chain), or updated (rebuild their pinned images and restart). Run folders are immutable snapshots of configs and data; the tool never overwrites them in place.
+
 ## Prerequisites
 
-- Docker and Docker Compose v2
-- bash, make, jq
-- curl or wget (for `make status`)
+- Docker + Docker Compose v2
+- `bash`, `make`
+- `jq` (required for genesis parsing; `make status` / `make infos` degrade gracefully if absent)
+- `curl` or `wget` (for `make status` and optional GitHub compare on drift)
+- `sha256sum` (Linux) or `shasum` (macOS) — either works
 
 ## Quick Start
 
-```bash
-# 1. Configure
-cp cluster.env.example cluster.env              # edit if needed (defaults work for 4 nodes)
-cp config.overrides.example config.overrides    # optional: customize node settings
+Bring up a fresh 4-node mesh cluster and verify it's producing blocks.
 
-# 2. Create the cluster
-#    First run: bootstraps images, generates node keys, prints validator info,
-#    then prompts you to provide genesis.json (or uses one already at ./genesis.json).
+```bash
+# 1. Configure. Defaults work for a 4-node mesh; see the cluster.env reference.
+cp cluster.env.example cluster.env               # edit if needed
+cp config.overrides.example config.overrides    # optional — see config.overrides reference
+
+# 2. Provide a genesis.json. make create will prompt if it's missing.
+cp /path/to/your/genesis.json .
+
+# 3. Create the run (generates node keys, inspects genesis, writes the run folder).
+#    First time: bootstraps Docker images. Subsequent runs skip building.
 make create
 
-# 3. Start it
+# 4. Start the containers.
 make start
+
+# 5. Check heights and peer counts.
+make status
+
+# 6. Full report — config, genesis, nodes, P2P/RPC endpoints.
+make infos
 ```
 
-`make create` does not start the cluster — it prepares a run folder. `make start`
-is the separate step that brings containers up (and rebuilds images if the run
-pins a version that isn't present locally).
+Open the monitoring dashboard at [http://localhost:3000](http://localhost:3000) (Grafana, anonymous Viewer access).
 
-Check that everything is running:
+To stop without discarding data: `make stop`. To resume: `make start` again.
+
+For details on the Makefile targets, see the [Makefile reference](#makefile-reference).
+To tune node counts, topology, or versions, see the [cluster.env reference](#clusterenv-reference).
+To override per-node gnoland config, see [config.overrides reference](#configoverrides-reference).
+
+## Cloning a run
+
+Use `make clone` when you want a **fresh blockchain** from the same validators and configs — for example, to reset state for a new test iteration without re-generating keys or editing genesis.json.
 
 ```bash
-make status
+# Current run:       runs/2026-04-16_12-53-57_...
+make clone            # creates runs/<new-timestamp>_... with the same configs + keys
+                      # drops db/, wal/, validator signing state, Loki logs, VM metrics
+                      # points runs/current at the new folder
+make start            # brings the clone up
+
+# Clone a specific past run instead of the current one:
+make clone run=2026-04-15_09-12-34_...
 ```
 
+What gets preserved vs dropped:
+
+| Kept                        | Dropped                     |
+| --------------------------- | --------------------------- |
+| genesis.json                | Chain database (db/)        |
+| cluster.env                 | Write-ahead log (wal/)      |
+| config.overrides            | Validator signing state     |
+| docker-compose.yml          | Loki log data               |
+| Watchtower/sentinel configs | VictoriaMetrics metric data |
+| Validator and node keys     | Grafana dashboard state     |
+
+See [Run folders & build state](#run-folders--build-state) for what lives inside a run folder.
+
+## Updating a run
+
+Use `make update` when a run's **pinned image state has drifted** from what your current env / source files specify. This happens when you bump `GNO_VERSION`, edit the `Dockerfile`, or `master` has moved since the run was created.
+
+```bash
+# Bump GNO_VERSION in cluster.env, or edit internal/Dockerfile, then:
+make update            # shows the drift (files / commits changed), rebuilds,
+                       # refreshes the run's .build-state pin, restarts
 ```
-Node       Status       Height   Latest Block             Peers
-----       ------       ------   ------------             -----
-node-1     running      42       2026-04-16T12:00:03      3
-node-2     running      42       2026-04-16T12:00:03      3
-node-3     running      42       2026-04-16T12:00:03      3
-node-4     running      42       2026-04-16T12:00:03      3
-```
 
-Open Grafana at [http://localhost:3000](http://localhost:3000) (anonymous access, Viewer role).
+`make start` never rebuilds. It always boots with the run's pinned images and — if it detects drift — prints a summary telling you either to `make update` (to adopt the change) or `make clone` (to try the new build on a copy and keep this run pristine).
 
-## Commands
+What triggers drift: any change in the hashed image inputs (`internal/Dockerfile` + `internal/docker/**` + `internal/scripts/parse-overrides.sh`) **or** a different resolved commit for `GNO_VERSION` / `WATCHTOWER_VERSION`. See [Run folders & build state](#run-folders--build-state) for how `.build-state` records what was pinned.
 
-| Command | Description |
-|---------|-------------|
-| `make help` | Show available commands |
-| `make build [force=1]` | Build Docker images. Skips each image whose content-addressed tag already exists; `force=1` rebuilds unconditionally. |
-| `make create [yes=1]` | Create a new run: ensures node secrets exist, prints validator info, inspects `genesis.json` (prompts unless `yes=1` or non-TTY), writes the run folder. Does not start containers. Bootstrap-builds images if none exist. |
-| `make start [run=<folder>]` | Start the current run, or switch to and start a past run. If the run's pinned build state has drifted, prints the diff and suggests `make clone` / `make update`, then starts with the pinned images anyway — never rebuilds. |
-| `make stop` | Stop the cluster (data is preserved in the run folder). |
-| `make status [watch=<sec>]` | Show each node's block height, peer count, and status. With `watch=` the display refreshes every N seconds. |
-| `make logs svc=<service>` | Follow logs for a specific service (e.g. `node-1`, `sentinel-1`, `watchtower`, `grafana`). |
-| `make infos` | Print node addresses, pubkeys, ports, and IDs. |
-| `make clone [run=<folder>]` | Duplicate the current (or specified) run with fresh chain state. |
-| `make update [run=<folder>]` | If the run's pinned build state has drifted, print the diff, rebuild images, refresh the pin, and restart. No-op (prints "Nothing to update.") when nothing has changed. Targets the current run unless `run=` is given. |
-| `make clean-imgs [yes=1]` | Remove all `gno-cluster-*` Docker images. Prompts unless `yes=1`; refuses in non-TTY mode without `yes=1`. |
-| `make clean-runs [yes=1]` | Remove all run folders. Prompts unless `yes=1`; refuses in non-TTY mode without `yes=1`. |
+---
+
+# Reference
+
+## Makefile reference
+
+Run `make help` for the full list. Targets fall into three groups:
+
+**Run lifecycle** — manage the set of runs on disk:
+
+| Target | Description |
+| ------ | ----------- |
+| `make create [yes=1]` | Create a new run. `yes=1` skips the genesis confirmation prompt. Bootstraps images on first run. |
+| `make clone [run=<folder>]` | Clone a run with fresh chain state. `run=` targets a past run, otherwise current. |
+| `make update [run=<folder>]` | Rebuild drifted images and restart the run. `run=` targets a past run, otherwise current. No-op if nothing drifted. |
+
+**Cluster ops** — operate on a specific run:
+
+| Target | Description |
+| ------ | ----------- |
+| `make start [run=<folder>]` | Start a run. `run=` switches `runs/current` to a past run. Never rebuilds — will surface drift and tell you to run update/clone. |
+| `make stop` | Stop the current run. Data stays on disk in the run folder. |
+| `make restart [run=<folder>]` | Stop then start. Useful with `run=` to switch and restart in one step. |
+| `make infos [run=<folder>]` | Full report: state, heights, sizes, cluster config, genesis info, node identities, P2P/RPC endpoints. |
+| `make status [watch=<sec>]` | Per-node heights, peer counts, reachability. `watch=<sec>` refreshes every N seconds. |
+| `make logs svc=<service>` | Follow logs for a service (e.g. `node-1`, `sentinel-1`, `watchtower`, `grafana`). |
+
+**Cleanup** — free disk and Docker resources:
+
+| Target | Description |
+| ------ | ----------- |
+| `make clean-imgs [yes=1]` | Remove all `gno-cluster-*` Docker images. Prompts unless `yes=1`. |
+| `make clean-runs [yes=1]` | Remove all run folders. Prompts unless `yes=1`; refuses in non-TTY without `yes=1`. Stops any running cluster first. |
 | `make clean [yes=1]` | `clean-runs` then `clean-imgs`. |
 
-## Configuration
+`make build [force=1]` also exists as an implementation detail (called by `create` and `update`). It skips targets whose content-addressed tag already exists; `force=1` rebuilds unconditionally.
 
-### cluster.env
+## cluster.env reference
 
 Copy `cluster.env.example` to `cluster.env`. All settings have sensible defaults.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GNO_VERSION` | `master` | Git tag or branch of gno to build |
-| `GNO_REPO` | `gnolang/gno` | GitHub repo for gno (`owner/repo`) |
-| `WATCHTOWER_VERSION` | `main` | Git tag or branch of watchtower to build |
-| `WATCHTOWER_REPO` | `aeddi/gno-watchtower` | GitHub repo for watchtower (`owner/repo`) |
-| `NUM_NODES` | `4` | Number of nodes in the cluster |
-| `TOPOLOGY` | `mesh` | Network topology (`mesh`, `star`, or `ring`) |
-| `GNOLAND_RPC_PORT_BASE` | `26657` | Host RPC port for node-1 (increments per node) |
-| `GNOLAND_P2P_PORT_BASE` | `26670` | Host P2P port for node-1 (increments per node) |
-| `GRAFANA_PORT` | `3000` | Host port for the Grafana UI |
+| Variable                | Default                | Description                                         |
+| ----------------------- | ---------------------- | --------------------------------------------------- |
+| `GNO_VERSION`           | `master`               | Git ref (branch, tag, or commit) for gno            |
+| `GNO_REPO`              | `gnolang/gno`          | GitHub repo for gno (`owner/repo`)                  |
+| `WATCHTOWER_VERSION`    | `main`                 | Git ref for watchtower/sentinel                     |
+| `WATCHTOWER_REPO`       | `aeddi/gno-watchtower` | GitHub repo for watchtower/sentinel                 |
+| `NUM_NODES`             | `4`                    | Number of nodes in the cluster                      |
+| `TOPOLOGY`              | `mesh`                 | Network topology — `mesh`, `star`, or `ring`        |
+| `GNOLAND_RPC_PORT_BASE` | `26657`                | Host RPC port for node-1 (increments per node)      |
+| `GNOLAND_P2P_PORT_BASE` | `26670`                | Host P2P port for node-1 (increments per node)      |
+| `GRAFANA_PORT`          | `3000`                 | Host port for the Grafana UI                        |
 
-### config.overrides
+At `make create` time, `cluster.env` is copied into the run folder and becomes the run's own pinned config. Editing the project-root `cluster.env` later affects future `make create` invocations, not existing runs — use `make update` to apply version bumps to an existing run.
 
-Optional file for customizing gnoland node configuration. Copy `config.overrides.example` for syntax reference.
+## config.overrides reference
+
+Optional file for tuning gnoland node config. Copy `config.overrides.example` for syntax, defaults, and the list of keys the system hardcodes on every start.
 
 Lines before any section header apply to all nodes. Section headers target specific nodes:
 
@@ -102,76 +164,80 @@ mempool.size = 5000
 ```
 
 Rules:
-- Global section is top-only (cannot be re-entered after a `[section]`)
-- Last-match wins if the same key is set for a node in multiple sections
-- Some config keys are hardcoded and cannot be overridden (P2P/RPC bind addresses, peer list)
 
-## Network Topology
+- Global (unheaded) section must be first — can't re-enter it after a `[section]`.
+- Last-match wins if the same key is set for a node in multiple sections.
+- A few keys are always overridden by the system (P2P/RPC bind addresses, persistent peers list) — see `config.overrides.example` for the full list.
+
+Overrides are applied by `internal/docker/gnoland-entrypoint.sh` on every container start, before the hardcoded settings.
+
+## Network topology
 
 Three topologies are available, controlling which nodes can communicate over P2P.
 
 ![](.topology.svg)
 
-**mesh** (default) — every node connects to every other node.
+- **mesh** (default) — every node connects to every other node.
+- **star** — `node-1` is the hub; all other nodes connect only through `node-1`.
+- **ring** — each node connects to its two neighbors in a circle.
 
-**star** — node-1 is the hub; all other nodes connect only through node-1.
+Enforcement at the Docker network layer:
 
-**ring** — each node connects to its two neighbors in a circle.
+- **mesh** — all nodes share a single bridge network (`gno-cluster_net-mesh`). Per-edge isolation would just waste address-pool slots when every pair is allowed.
+- **star** / **ring** — each allowed link gets its own bridge network, so Docker enforces which nodes can reach which.
 
-Topology is enforced at the Docker network level:
+A separate sidecar network per node wires each gnoland instance to its sentinel for monitoring. All runs use the fixed compose project name `gno-cluster`, so only one run can be live at a time (host ports collide) and `make stop` releases networks reliably regardless of which run folder owned them.
 
-- **mesh**: all nodes join a single shared bridge network (`gno-cluster_net-mesh`). Since every pair is allowed anyway, per-edge isolation would just waste address-pool slots.
-- **star** / **ring**: each allowed link gets its own bridge network, so Docker's network layer enforces which nodes can reach which.
+Before starting, `make start` runs a preflight against Docker's `default-address-pools`. If the declared pool can't fit the topology's networks, it fails with options: reduce `NUM_NODES`, switch `TOPOLOGY`, free unused networks (`docker network prune`), or extend `~/.docker/daemon.json` with a wider pool.
 
-A separate sidecar network per node connects each gnoland instance to its sentinel for monitoring.
+## Run folders & build state
 
-Before starting, `make start` runs a preflight check that estimates Docker's address-pool capacity against what the cluster needs, and fails with actionable options (reduce size, switch topology, free unused networks, or extend `~/.docker/daemon.json`) when the pool is insufficient.
-
-## Runs
-
-Each `make create` produces a self-contained **run folder** under `runs/` with a descriptive name:
+Each `make create` produces a timestamped folder under `runs/`:
 
 ```
 runs/2026-04-16_12-53-57_gnolang-gno_master_4-nodes_4-vals_9-bals_78-txs/
+├── cluster.env              # Snapshot of the project-root env at create time
+├── config.overrides         # Snapshot (if present)
+├── genesis.json             # Snapshot
+├── docker-compose.yml       # Generated
+├── watchtower.toml          # Generated
+├── sentinel-N-config.toml   # Generated, one per node
+├── grafana-provisioning/    # Generated monitoring config
+├── gnoland-data-N/          # Per-node data (chain, WAL, secrets copy)
+├── loki-data/               # Logs collected by Loki
+├── victoria-data/           # Metrics collected by VictoriaMetrics
+├── grafana-data/            # Grafana storage
+└── .build-state             # Pinned build inputs — see below
 ```
 
-The folder contains snapshots of all configs, generated compose and monitoring configs, node data directories, and monitoring storage. A `runs/current` symlink points to the active run.
+`runs/current` is a symlink to the active run.
 
-### Lifecycle
+**`.build-state`** is written by `make create` (and refreshed by `make update`). It records:
 
-- `make create` — creates a new run folder and points `runs/current` at it. Does not start containers.
-- `make start` — starts the current run. First time (after `make create`) brings containers up; subsequent calls resume after a `make stop`.
-- `make start run=<folder>` — switch `runs/current` to a past run, then start. Boots with that run's pinned images; if the pinned images have been pruned, `make start` asks you to run `make update` to rebuild them.
-- `make stop` — stops the cluster; all data is preserved in the run folder.
-- `make clone [run=<folder>]` — duplicate a run with fresh chain state (same keys, same configs, empty blockchain). Useful for restarting the same setup without regenerating keys or genesis.
+- resolved `GNO_COMMIT` and `WATCHTOWER_COMMIT`
+- image tags (`<short-commit>-<content-hash>`)
+- per-file sha256 of all files that go into images (`internal/Dockerfile`, `internal/docker/**`, `internal/scripts/parse-overrides.sh`)
+- `BUILD_DATE`
 
-### What clone preserves
-
-| Kept | Dropped |
-|------|---------|
-| genesis.json | Chain database (db/) |
-| cluster.env | Write-ahead log (wal/) |
-| config.overrides | Validator signing state |
-| docker-compose.yml | Loki log data |
-| Watchtower/sentinel configs | VictoriaMetrics metric data |
-| Validator and node keys | Grafana dashboard state |
+`make start` reads `.build-state`, re-resolves commits and recomputes the content hash, and — if anything changed — prints a drift summary with `make clone` / `make update` suggestions. It then boots with the pinned images (never rebuilds). Writes are atomic (temp file + rename) so an interrupted build doesn't leave a corrupted state.
 
 ## Architecture
 
-For a 4-node mesh cluster, `make start` creates:
+For a 4-node mesh cluster, `make start` runs:
 
-- **4 gnoland nodes** (`node-1` .. `node-4`) — blockchain nodes with RPC and P2P
-- **4 sentinels** (`sentinel-1` .. `sentinel-4`) — one per node, collects RPC data, logs, and resource metrics
+- **4 gnoland nodes** (`node-1` .. `node-4`) — RPC + P2P
+- **4 sentinels** (`sentinel-1` .. `sentinel-4`) — one per node, collects RPC data, logs, resource metrics
 - **1 watchtower** — receives data from all sentinels
 - **1 VictoriaMetrics** — metrics storage (Prometheus-compatible)
 - **1 Loki** — log storage
-- **1 Grafana** — dashboards and visualization
+- **1 Grafana** — dashboards
 
-Network isolation ensures topology enforcement:
-- **mesh**: all nodes share one bridge network; connectivity is governed by `persistent_peers`
-- **star** / **ring**: each allowed node pair shares a dedicated Docker bridge network
-- Each node and its sentinel share a private sidecar network
-- Sentinels, watchtower, and the monitoring stack share a watchtower network
-- Nodes never join the watchtower network directly
+Network isolation:
 
-All Docker resources use a fixed `gno-cluster` compose project name, so `make stop` reliably releases networks across runs (no accumulation from previous runs with timestamp-prefixed names). Docker images are tagged with `<short-commit>-<content-hash>` so `make build` is idempotent — it skips targets whose tag already exists locally.
+- **mesh** — one shared bridge for all nodes; connectivity governed by `persistent_peers`.
+- **star** / **ring** — one bridge per allowed node pair; other links are unreachable at the Docker layer.
+- Each node and its sentinel share a private sidecar network.
+- Sentinels, watchtower, and the monitoring stack share a watchtower network.
+- Nodes never join the watchtower network directly.
+
+Docker images are tagged with `<short-commit>-<content-hash>` (e.g. `gno-cluster-gnoland:26dc377ab634-f26bc34e`) so `make build` is idempotent. `:latest` is maintained as an alias that compose files reference.
