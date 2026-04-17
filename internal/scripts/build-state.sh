@@ -28,6 +28,9 @@ source "${_BUILD_STATE_DIR}/image-tags.sh"
 
 # Writes current build state. Expects these env vars: GNO_REPO, GNO_VERSION,
 # GNO_COMMIT, WATCHTOWER_REPO, WATCHTOWER_VERSION, WATCHTOWER_COMMIT, PROJECT_ROOT.
+# Writes atomically: builds the content in a sibling temp file, then renames.
+# That way a killed process leaves either the old state or no change, never a
+# truncated file that would confuse read_build_state_as_prev.
 write_build_state() {
     local out_file="$1"
     local build_date content_hash gnoland_tag watchtower_tag sentinel_tag file_lines
@@ -40,6 +43,11 @@ write_build_state() {
         "${PROJECT_ROOT}/internal/Dockerfile" \
         "${PROJECT_ROOT}/internal/docker" \
         "${PROJECT_ROOT}/internal/scripts/parse-overrides.sh")
+
+    local tmp
+    tmp=$(mktemp "${out_file}.tmp.XXXXXX")
+    # Clean up the temp file on any non-local exit from this function.
+    trap 'rm -f "$tmp"' RETURN
 
     {
         echo "# Build state snapshot — inputs used when this run's images were last built."
@@ -65,7 +73,9 @@ write_build_state() {
             [[ -n "$line" ]] && printf '    "%s"\n' "$line"
         done <<< "$file_lines"
         echo ")"
-    } > "$out_file"
+    } > "$tmp"
+
+    mv -f "$tmp" "$out_file"
 }
 
 # Reads <file> in a subshell (so sourcing doesn't clobber the caller's env) and
