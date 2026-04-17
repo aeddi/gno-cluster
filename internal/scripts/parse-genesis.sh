@@ -20,6 +20,7 @@ parse_genesis() {
         echo "Error: genesis.json not found at $genesis" >&2
         return 1
     fi
+    require_tool jq "Install with: brew install jq (macOS) | apt install jq (Debian)" || return 1
 
     local chain_id genesis_time sha256 vals bals txs power
     chain_id=$(jq -r '.chain_id // ""' "$genesis")
@@ -45,5 +46,6 @@ parse_genesis_validators() {
         echo "Error: genesis.json not found at $genesis" >&2
         return 1
     fi
+    require_tool jq "Install with: brew install jq (macOS) | apt install jq (Debian)" || return 1
     jq -r '.validators[] | [.address, .pub_key.value, .power, (.name // "")] | join("|")' "$genesis"
 }

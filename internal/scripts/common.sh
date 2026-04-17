@@ -57,3 +57,15 @@ http_get_silent() {
         return 1
     fi
 }
+
+# Enforces a hard dependency on a command. Prints an install hint and returns
+# non-zero when the tool is missing. Callers that can't proceed without the
+# tool should propagate the return code.
+require_tool() {
+    local tool="$1" hint="${2:-}"
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "Error: '${tool}' is required but not installed." >&2
+        [[ -n "$hint" ]] && echo "  ${hint}" >&2
+        return 1
+    fi
+}

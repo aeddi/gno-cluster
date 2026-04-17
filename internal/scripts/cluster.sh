@@ -37,14 +37,6 @@ gnoland_run() {
     docker run --rm --entrypoint gnoland "$@"
 }
 
-# Extracts a JSON string value by key from stdin. Handles "key":"val" and "key": "val".
-# Usage: echo "$json" | json_val <key>
-json_val() {
-    local key="$1"
-    grep -o "\"${key}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 \
-        | sed "s/\"${key}\"[[:space:]]*:[[:space:]]*\"//;s/\"$//"
-}
-
 # HTTP GET with curl→wget fallback.
 http_get() {
     local url="$1"
@@ -607,10 +599,10 @@ render_status() {
             printf "%-10s %-12s %-8s %-24s %s${eol}\n" "node-${i}" "unreachable" "-" "-" "-"
         else
             local height block_time num_peers net_info
-            height=$(echo "$result" | json_val "latest_block_height")
-            block_time=$(echo "$result" | json_val "latest_block_time" | cut -c1-19)
+            height=$(echo "$result" | jq -r '.result.sync_info.latest_block_height // "-"' 2>/dev/null || echo "-")
+            block_time=$(echo "$result" | jq -r '.result.sync_info.latest_block_time // "-"' 2>/dev/null | cut -c1-19)
             net_info=$(http_get "http://localhost:${port}/net_info") || true
-            num_peers=$(echo "$net_info" | json_val "n_peers")
+            num_peers=$(echo "$net_info" | jq -r '.result.n_peers // "-"' 2>/dev/null || echo "-")
             printf "%-10s %-12s %-8s %-24s %s${eol}\n" "node-${i}" "running" "${height:-?}" "${block_time:-?}" "${num_peers:-?}"
         fi
     done
@@ -631,6 +623,13 @@ cmd_status() {
     local run_name
     run_name=$(basename "$current")
     local watch_interval="${1:-}"
+
+    # Non-mandatory info — warn once if jq is missing; height/block/peers will
+    # render as "-" but node reachability is still reported.
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "Warning: jq not installed; height/block/peers will be unavailable." >&2
+        echo "" >&2
+    fi
 
     if [[ -n "$watch_interval" ]]; then
         local eol=$'\033[K'
