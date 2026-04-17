@@ -93,11 +93,3 @@ bash "${SCRIPTS_DIR}/generate-compose.sh" \
 # ---- Update current symlink
 ln -sfn "$RUN_DIR" "${PROJECT_ROOT}/runs/current"
 echo "==> Symlinked runs/current -> ${RUN_NAME}"
-
-# ---- Start
-echo "==> Starting cluster..."
-docker compose -f "${RUN_DIR}/docker-compose.yml" up -d
-
-echo "==> Cluster started. ${NUM_NODES} nodes, ${TOPOLOGY} topology."
-echo "    Grafana: http://localhost:${GRAFANA_PORT}"
-echo "    RPC:     http://localhost:${RPC_PORT_BASE} (node-1) .. http://localhost:$((RPC_PORT_BASE + NUM_NODES - 1)) (node-${NUM_NODES})"

@@ -4,8 +4,8 @@
 #
 # Targets:
 #   build    [force=1]        Build Docker images (skip if up to date; force=1 rebuilds)
-#   init                      Generate node secrets (keys, node IDs)
-#   start    [run=<folder>]   Start a new cluster or resume current or specified past run
+#   create   [yes=1]          Create a new run (keys + images + run folder; does not start)
+#   start    [run=<folder>]   Start the current run, or switch to and start a past run
 #   stop                      Stop the cluster (data is preserved)
 #   clone    [run=<folder>]   Clone current or specified past run with fresh chain state
 #   status   [watch=<sec>]    Show each node's block height, peers, and status
@@ -43,7 +43,7 @@ export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GRAFANA_PO
 CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 
 .DEFAULT_GOAL := help
-.PHONY: help build init start stop clone status logs infos update clean clean-runs clean-images
+.PHONY: help build create start stop clone status logs infos update clean clean-runs clean-images
 
 help:
 	@awk '/^# Usage:/,/^$$/{sub(/^# ?/,""); print}' $(MAKEFILE_LIST)
@@ -51,8 +51,8 @@ help:
 build:
 	@$(CLUSTER) build $(force)
 
-init:
-	@$(CLUSTER) init
+create:
+	@$(CLUSTER) create $(yes)
 
 start:
 	@$(CLUSTER) start $(run)

@@ -17,6 +17,8 @@ GNOLAND_IMAGE="gno-cluster-gnoland:latest"
 source "${SCRIPT_DIR}/image-tags.sh"
 # shellcheck source=preflight.sh
 source "${SCRIPT_DIR}/preflight.sh"
+# shellcheck source=parse-genesis.sh
+source "${SCRIPT_DIR}/parse-genesis.sh"
 
 # Fix the docker compose project name so networks have stable names across runs.
 # Only one run can be active at a time (host ports collide), so reusing network
@@ -172,44 +174,189 @@ cmd_build() {
     echo "==> Build complete."
 }
 
-# ---- Init
+# ---- Create
 
-cmd_init() {
-    echo "==> Initializing secrets for ${NUM_NODES} nodes..."
+# Ensures secrets exist for nodes 1..NUM_NODES. Skips existing, creates missing.
+_ensure_node_secrets() {
+    echo "==> Ensuring secrets for ${NUM_NODES} nodes..."
     mkdir -p secrets
 
+    local i node_id
     for i in $(seq 1 "$NUM_NODES"); do
         if [[ -d "secrets/node-${i}" ]]; then
-            echo "  node-${i}: secrets exist, skipping"
+            echo "  node-${i}: skipping, already exists"
             continue
         fi
-
-        echo "  node-${i}: generating secrets..."
+        echo "  node-${i}: creating..."
         mkdir -p "secrets/node-${i}"
         gnoland_run \
             -v "${PROJECT_ROOT}/secrets/node-${i}:/gnoland-data" \
             "$GNOLAND_IMAGE" \
             secrets init --data-dir /gnoland-data
-
-        echo "  node-${i}: extracting node ID..."
-        local node_id
         node_id=$(gnoland_run \
             -v "${PROJECT_ROOT}/secrets/node-${i}:/gnoland-data" \
             "$GNOLAND_IMAGE" \
             secrets get node_id.id -raw --data-dir /gnoland-data 2>/dev/null)
         echo "$node_id" > "secrets/node-${i}/node_id"
     done
+}
 
+_print_node_info_table() {
     echo ""
     echo "==> Node information:"
     printf "  %-12s %-44s %-96s %s\n" "Moniker" "Address" "PubKey" "Node ID"
     printf "  %-12s %-44s %-96s %s\n" "-------" "-------" "------" "-------"
+    local i
     for i in $(seq 1 "$NUM_NODES"); do
         get_node_info "$i"
         printf "  %-12s %-44s %-96s %s\n" "node-${i}" "$_addr" "$_pubkey" "$_node_id"
     done
+}
+
+# Prints the genesis summary: chain_id, time, sha256, balances/txs counts,
+# and a validator-set breakdown (which validators belong to this cluster).
+_print_genesis_info() {
+    local genesis="$1"
+    local info
+    info=$(parse_genesis "$genesis")
+    local chain_id genesis_time sha256 validators_count total_voting_power balances_count txs_count
+    eval "$info"
+
+    echo "==> Genesis: $(basename "$genesis")"
+    echo "    chain_id:       ${chain_id}"
+    echo "    genesis_time:   ${genesis_time}"
+    echo "    sha256:         ${sha256}"
+    echo "    balances:       ${balances_count}"
+    echo "    txs:            ${txs_count}"
+
+    # Collect our addresses (parallel arrays; works in bash 3.2).
+    # Address is the stable identifier — pubkey formats differ between gnoland's
+    # `secrets get -raw` (bech32 gpub...) and genesis.pub_key.value (base64).
+    local our_addrs=() our_nodes=() i
+    for i in $(seq 1 "$NUM_NODES"); do
+        [[ -d "secrets/node-${i}" ]] || continue
+        get_node_info "$i"
+        our_addrs+=("$_addr")
+        our_nodes+=("node-${i}")
+    done
+
+    local ours=() externals=() addr _pubkey power _name
+    while IFS='|' read -r addr _pubkey power _name; do
+        local match="" idx=0 our_addr
+        for our_addr in "${our_addrs[@]:-}"; do
+            if [[ "$our_addr" == "$addr" ]]; then
+                match="${our_nodes[$idx]}"
+                break
+            fi
+            idx=$((idx + 1))
+        done
+        if [[ -n "$match" ]]; then
+            ours+=("${match}|${addr}|${power}")
+        else
+            externals+=("${addr}|${power}")
+        fi
+    done < <(parse_genesis_validators "$genesis")
+
+    echo "    Validator set:  ${validators_count} validators (voting_power sum = ${total_voting_power})"
+    if ((${#ours[@]} > 0)); then
+        echo "      ${#ours[@]} from this cluster:"
+        local v n a p
+        for v in "${ours[@]}"; do
+            IFS='|' read -r n a p <<< "$v"
+            printf "        %-10s %s  pow=%s\n" "$n" "$a" "$p"
+        done
+    fi
+    if ((${#externals[@]} > 0)); then
+        echo "      ${#externals[@]} external:"
+        local v a p
+        for v in "${externals[@]}"; do
+            IFS='|' read -r a p <<< "$v"
+            printf "        %-10s %s  pow=%s\n" "" "$a" "$p"
+        done
+    fi
+}
+
+cmd_create() {
+    local yes="${1:-}"
+
+    if [[ ! -f cluster.env ]]; then
+        echo "Error: cluster.env not found."
+        echo "  Copy cluster.env.example to cluster.env and adjust settings."
+        exit 1
+    fi
+    validate_port_ranges "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$NUM_NODES"
+
+    if [[ -L "$CURRENT_LINK" ]]; then
+        local current
+        current=$(readlink "$CURRENT_LINK")
+        if is_running "${current}/docker-compose.yml"; then
+            echo "Error: a cluster is currently running ($(basename "$current"))."
+            echo "  Run 'make stop' first."
+            exit 1
+        fi
+    fi
+
+    local interactive=1
+    if [[ -n "$yes" || ! -t 0 ]]; then
+        interactive=0
+    fi
+
+    cmd_build
     echo ""
-    echo "==> Provide your genesis.json, then run 'make start'"
+    _ensure_node_secrets
+    _print_node_info_table
+
+    local genesis="${PROJECT_ROOT}/genesis.json"
+    while true; do
+        if [[ ! -f "$genesis" ]]; then
+            if ((interactive == 0)); then
+                echo "Error: genesis.json not found at ${genesis}." >&2
+                echo "  Non-interactive mode requires a pre-existing genesis.json." >&2
+                echo "  Provide it or re-run from a TTY without yes=1 to be prompted." >&2
+                exit 1
+            fi
+            echo ""
+            echo "No genesis.json found. Copy your genesis.json to ${genesis}, then press Enter."
+            read -r _
+            continue
+        fi
+
+        echo ""
+        _print_genesis_info "$genesis"
+
+        if ((interactive == 0)); then
+            break
+        fi
+
+        echo ""
+        local ans
+        read -r -p "Proceed with this genesis? [Y/n/r(eplace)] " ans
+        case "$ans" in
+            ""|y|Y|yes)
+                break
+                ;;
+            n|N|no)
+                echo "Aborted."
+                return
+                ;;
+            r|R|replace)
+                echo "Copy your new genesis.json to ${genesis}, then press Enter."
+                read -r _
+                continue
+                ;;
+            *)
+                echo "Please answer y, n, or r."
+                ;;
+        esac
+    done
+
+    echo ""
+    bash "${SCRIPT_DIR}/create-run.sh" \
+        "$PROJECT_ROOT" "$GNO_REPO" "$GNO_VERSION" \
+        "$NUM_NODES" "$TOPOLOGY" \
+        "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$GRAFANA_PORT"
+    echo ""
+    echo "==> Run created. Run 'make start' to start the cluster."
 }
 
 # ---- Start
@@ -245,50 +392,29 @@ cmd_start() {
         return
     fi
 
-    # Check prerequisites
-    if [[ ! -f cluster.env ]]; then
-        echo "Error: cluster.env not found."
-        echo "  Copy cluster.env.example to cluster.env and adjust settings."
+    # Start the current run (must already exist)
+    if [[ ! -L "$CURRENT_LINK" ]]; then
+        echo "Error: no current run to start."
+        echo "  Run 'make create' to create a new cluster,"
+        echo "  or 'make start run=<folder>' to start a specific past run."
         exit 1
     fi
-    if [[ ! -f genesis.json ]]; then
-        echo "Error: genesis.json not found."
-        echo "  Run 'make init' to generate secrets, then provide genesis.json."
-        exit 1
-    fi
-    if [[ ! -d secrets ]]; then
-        echo "Error: secrets/ not found. Run 'make init' first."
-        exit 1
-    fi
-    validate_port_ranges "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$NUM_NODES"
-
-    # Resume current run if it exists
-    if [[ -L "$CURRENT_LINK" ]]; then
-        local current
-        current=$(readlink "$CURRENT_LINK")
-        if is_running "${current}/docker-compose.yml"; then
-            echo "Cluster is already running ($(basename "$current"))."
-            echo "  Run 'make stop' first, or 'make start run=<folder>' to switch."
-            return
-        fi
-        # Align preflight with the run's actual topology/N
-        if [[ -f "${current}/cluster.env" ]]; then
-            # shellcheck disable=SC1091
-            source "${current}/cluster.env"
-        fi
-        check_network_capacity "$TOPOLOGY" "$NUM_NODES"
-        echo "==> Resuming stopped run: $(basename "$current")"
-        docker compose -f "${current}/docker-compose.yml" up -d
-        echo "==> Run resumed."
+    local current
+    current=$(readlink "$CURRENT_LINK")
+    if is_running "${current}/docker-compose.yml"; then
+        echo "Cluster is already running ($(basename "$current"))."
+        echo "  Run 'make stop' first, or 'make start run=<folder>' to switch."
         return
     fi
-
-    # Create fresh run
+    # Align preflight with the run's actual topology/N
+    if [[ -f "${current}/cluster.env" ]]; then
+        # shellcheck disable=SC1091
+        source "${current}/cluster.env"
+    fi
     check_network_capacity "$TOPOLOGY" "$NUM_NODES"
-    bash "${SCRIPT_DIR}/create-run.sh" \
-        "$PROJECT_ROOT" "$GNO_REPO" "$GNO_VERSION" \
-        "$NUM_NODES" "$TOPOLOGY" \
-        "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$GRAFANA_PORT"
+    echo "==> Starting run: $(basename "$current")"
+    docker compose -f "${current}/docker-compose.yml" up -d
+    echo "==> Run started."
 }
 
 # ---- Stop
@@ -556,12 +682,12 @@ cmd_clean() {
 
 # ---- Dispatch
 
-command="${1:?Usage: cluster.sh <command> (build|init|start|stop|clone|status|logs|infos|update|clean|clean-runs|clean-images)}"
+command="${1:?Usage: cluster.sh <command> (build|create|start|stop|clone|status|logs|infos|update|clean|clean-runs|clean-images)}"
 shift || true
 
 case "$command" in
     build)        cmd_build "$@" ;;
-    init)         cmd_init ;;
+    create)       cmd_create "$@" ;;
     start)        cmd_start "$@" ;;
     stop)         cmd_stop ;;
     clone)        cmd_clone "$@" ;;
