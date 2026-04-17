@@ -10,6 +10,7 @@
 # Cluster ops:
 #   start        [run=<folder>]   Start a run (run= switches to a past run, else current)
 #   stop                          Stop the current run
+#   restart      [run=<folder>]   Stop then start (run= switches to a past run, else current)
 #   infos        [run=<folder>]   Print node addresses, pubkeys, ports (run= targets a past run, else current)
 #   status       [watch=<sec>]    Show nodes' block height, peers, and status (watch= refreshes every N seconds)
 #   logs         svc=<service>    Follow logs for a service (svc= is required, e.g. node-1, watchtower)
@@ -46,7 +47,7 @@ export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GRAFANA_PO
 # and better error handling. The Makefile is just a thin wrapper around it.
 CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 
-.PHONY: help build create start stop clone status logs infos update clean clean-runs clean-imgs
+.PHONY: help build create start stop restart clone status logs infos update clean clean-runs clean-imgs
 
 help:
 	@awk '/^# Usage:/,/^$$/{sub(/^# ?/,""); print}' $(MAKEFILE_LIST)
@@ -59,6 +60,9 @@ start:
 
 stop:
 	@$(CLUSTER) stop
+
+restart:
+	@$(CLUSTER) restart $(run)
 
 clone:
 	@$(CLUSTER) clone $(run)

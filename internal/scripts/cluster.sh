@@ -2,8 +2,8 @@
 # internal/scripts/cluster.sh — Main entry point for gno-cluster operations.
 #
 # Usage: cluster.sh <command> [args]
-# Commands: build, create, start, stop, clone, status, logs, infos, update,
-#           clean, clean-runs, clean-imgs
+# Commands: build, create, start, stop, restart, clone, status, logs, infos,
+#           update, clean, clean-runs, clean-imgs
 #
 # Expects environment variables (set by Makefile or cluster.env):
 #   PROJECT_ROOT, GNO_VERSION, GNO_REPO, WATCHTOWER_VERSION, WATCHTOWER_REPO,
@@ -517,6 +517,21 @@ cmd_stop() {
     echo "==> Stopped. Data preserved in $(basename "$current")/"
 }
 
+# ---- Restart
+
+cmd_restart() {
+    local run_arg="${1:-}"
+    # Stop the current run if it's running. If run= is given, cmd_start handles
+    # switching to that folder; if not given, cmd_start resumes current.
+    local current
+    if current=$(resolve_current_run) && is_running "${current}/docker-compose.yml"; then
+        echo "==> Stopping run: $(basename "$current")"
+        docker compose -f "${current}/docker-compose.yml" down
+        echo ""
+    fi
+    cmd_start "$run_arg"
+}
+
 # ---- Clone
 
 cmd_clone() {
@@ -1015,7 +1030,7 @@ cmd_clean() {
 
 # ---- Dispatch
 
-command="${1:?Usage: cluster.sh <command> (build|create|start|stop|clone|status|logs|infos|update|clean|clean-runs|clean-imgs)}"
+command="${1:?Usage: cluster.sh <command> (build|create|start|stop|restart|clone|status|logs|infos|update|clean|clean-runs|clean-imgs)}"
 shift || true
 
 case "$command" in
@@ -1023,6 +1038,7 @@ case "$command" in
     create)       cmd_create "$@" ;;
     start)        cmd_start "$@" ;;
     stop)         cmd_stop ;;
+    restart)      cmd_restart "$@" ;;
     clone)        cmd_clone "$@" ;;
     status)       cmd_status "$@" ;;
     logs)         cmd_logs "$@" ;;
