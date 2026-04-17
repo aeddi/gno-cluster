@@ -5,7 +5,9 @@
 # Targets:
 #   build    [force=1]        Build Docker images (skip if up to date; force=1 rebuilds)
 #   create   [yes=1]          Create a new run (keys + run folder; bootstrap-builds if no image)
-#   start    [run=<folder>]   Start the current run, or switch to and start a past run (auto-builds)
+#   start    [run=<folder>] [upgrade=1]
+#                             Start the current run (or switch to a past run). Rebuilds if the
+#                             run's pinned state drifted; prompts unless upgrade=1 (default: keep).
 #   stop                      Stop the cluster (data is preserved)
 #   clone    [run=<folder>]   Clone current or specified past run with fresh chain state
 #   status   [watch=<sec>]    Show each node's block height, peers, and status
@@ -56,7 +58,7 @@ create:
 	@$(CLUSTER) create $(yes)
 
 start:
-	@$(CLUSTER) start $(run)
+	@upgrade=$(upgrade) $(CLUSTER) start $(run)
 
 stop:
 	@$(CLUSTER) stop

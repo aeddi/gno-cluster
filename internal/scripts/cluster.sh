@@ -15,6 +15,8 @@ GNOLAND_IMAGE="gno-cluster-gnoland:latest"
 
 # shellcheck source=image-tags.sh
 source "${SCRIPT_DIR}/image-tags.sh"
+# shellcheck source=build-state.sh
+source "${SCRIPT_DIR}/build-state.sh"
 # shellcheck source=preflight.sh
 source "${SCRIPT_DIR}/preflight.sh"
 # shellcheck source=parse-genesis.sh
@@ -125,53 +127,143 @@ _build_image() {
     echo ""
 }
 
+# Resolves GNO_COMMIT and WATCHTOWER_COMMIT from the current GNO_VERSION / WATCHTOWER_VERSION
+# refs, unless they're already set in the env. Called by cmd_build, cmd_create, cmd_start;
+# the second+ caller in one invocation pays no extra network cost.
+resolve_commits() {
+    if [[ -n "${GNO_COMMIT:-}" && -n "${WATCHTOWER_COMMIT:-}" ]]; then
+        return
+    fi
+    echo "==> Resolving versions to commit hashes..."
+    if [[ -z "${GNO_COMMIT:-}" ]]; then
+        GNO_COMMIT=$(git ls-remote "https://github.com/${GNO_REPO}.git" "${GNO_VERSION}" | head -1 | cut -f1)
+        if [[ -z "$GNO_COMMIT" ]]; then
+            echo "Error: could not resolve GNO_VERSION='${GNO_VERSION}' from ${GNO_REPO}"
+            exit 1
+        fi
+    fi
+    if [[ -z "${WATCHTOWER_COMMIT:-}" ]]; then
+        WATCHTOWER_COMMIT=$(git ls-remote "https://github.com/${WATCHTOWER_REPO}.git" "${WATCHTOWER_VERSION}" | head -1 | cut -f1)
+        if [[ -z "$WATCHTOWER_COMMIT" ]]; then
+            echo "Error: could not resolve WATCHTOWER_VERSION='${WATCHTOWER_VERSION}' from ${WATCHTOWER_REPO}"
+            exit 1
+        fi
+    fi
+    export GNO_COMMIT WATCHTOWER_COMMIT
+}
+
 cmd_build() {
     local force="${1:-}"
-    echo "==> Resolving versions to commit hashes..."
+    resolve_commits
 
-    local gno_commit wt_commit build_date
-    gno_commit=$(git ls-remote "https://github.com/${GNO_REPO}.git" "${GNO_VERSION}" | head -1 | cut -f1)
-    if [[ -z "$gno_commit" ]]; then
-        echo "Error: could not resolve GNO_VERSION='${GNO_VERSION}' from ${GNO_REPO}"
-        exit 1
-    fi
-
-    wt_commit=$(git ls-remote "https://github.com/${WATCHTOWER_REPO}.git" "${WATCHTOWER_VERSION}" | head -1 | cut -f1)
-    if [[ -z "$wt_commit" ]]; then
-        echo "Error: could not resolve WATCHTOWER_VERSION='${WATCHTOWER_VERSION}' from ${WATCHTOWER_REPO}"
-        exit 1
-    fi
-
+    local build_date
     build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
     local gnoland_tag watchtower_tag sentinel_tag
-    gnoland_tag=$(compute_image_tag gnoland "$gno_commit" "$wt_commit")
-    watchtower_tag=$(compute_image_tag watchtower "$gno_commit" "$wt_commit")
-    sentinel_tag=$(compute_image_tag sentinel "$gno_commit" "$wt_commit")
+    gnoland_tag=$(compute_image_tag gnoland "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
+    watchtower_tag=$(compute_image_tag watchtower "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
+    sentinel_tag=$(compute_image_tag sentinel "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
 
-    echo "  gno:        ${GNO_REPO}@${GNO_VERSION} -> ${gno_commit:0:12}"
-    echo "  watchtower: ${WATCHTOWER_REPO}@${WATCHTOWER_VERSION} -> ${wt_commit:0:12}"
+    echo "  gno:        ${GNO_REPO}@${GNO_VERSION} -> ${GNO_COMMIT:0:12}"
+    echo "  watchtower: ${WATCHTOWER_REPO}@${WATCHTOWER_VERSION} -> ${WATCHTOWER_COMMIT:0:12}"
     echo ""
 
     _build_image gnoland "$gnoland_tag" "$force" \
         --build-arg "GNO_REPO=${GNO_REPO}" \
-        --build-arg "GNO_COMMIT_HASH=${gno_commit}" \
+        --build-arg "GNO_COMMIT_HASH=${GNO_COMMIT}" \
         --build-arg "GNO_VERSION=${GNO_VERSION}" \
         --build-arg "BUILD_DATE=${build_date}"
 
     _build_image watchtower "$watchtower_tag" "$force" \
         --build-arg "WATCHTOWER_REPO=${WATCHTOWER_REPO}" \
-        --build-arg "WATCHTOWER_COMMIT_HASH=${wt_commit}" \
+        --build-arg "WATCHTOWER_COMMIT_HASH=${WATCHTOWER_COMMIT}" \
         --build-arg "WATCHTOWER_VERSION=${WATCHTOWER_VERSION}" \
         --build-arg "BUILD_DATE=${build_date}"
 
     _build_image sentinel "$sentinel_tag" "$force" \
         --build-arg "WATCHTOWER_REPO=${WATCHTOWER_REPO}" \
-        --build-arg "WATCHTOWER_COMMIT_HASH=${wt_commit}" \
+        --build-arg "WATCHTOWER_COMMIT_HASH=${WATCHTOWER_COMMIT}" \
         --build-arg "WATCHTOWER_VERSION=${WATCHTOWER_VERSION}" \
         --build-arg "BUILD_DATE=${build_date}"
 
     echo "==> Build complete."
+}
+
+# Ensures images are ready for starting a run. Reads run's .build-state (if any),
+# compares against current env state, prompts on drift, then either rebuilds
+# (updating .build-state) or re-tags the pinned images as :latest.
+# Expects: GNO_COMMIT and WATCHTOWER_COMMIT already resolved in env.
+# Args: run_dir [upgrade_flag]
+ensure_images_for_run() {
+    local run_dir="$1" upgrade="${2:-}"
+    local state_file="${run_dir}/.build-state"
+
+    # Load previous build state into PREV_* vars (empty if no prior state).
+    local prev_output has_prev=0
+    if prev_output=$(read_build_state_as_prev "$state_file"); then
+        eval "$prev_output"
+        has_prev=1
+    fi
+
+    local drift_summary="" has_drift=0
+    if ((has_prev)); then
+        set +e
+        drift_summary=$(build_state_drift_summary)
+        has_drift=$?
+        set -e
+    fi
+
+    local action="rebuild"
+    if ((has_drift)); then
+        echo "==> Build state changed since last build (${PREV_BUILD_DATE})."
+        echo ""
+        echo "$drift_summary"
+        echo ""
+        echo "    To preserve this run and try the new build separately:"
+        echo "      make clone     # new run from this one"
+        echo "      make start     # starts the clone with the new build"
+        echo ""
+        if [[ -n "$upgrade" ]]; then
+            action="rebuild"
+            echo "    upgrade=1 → rebuilding with new state."
+        elif [[ -t 0 ]]; then
+            local ans
+            read -r -p "    Rebuild this run with the new state? [r/K] " ans
+            case "$ans" in
+                r|R|rebuild|y|Y|yes) action="rebuild" ;;
+                *) action="keep" ;;
+            esac
+        else
+            action="keep"
+            echo "    (non-TTY: keeping previously-built images. Set upgrade=1 to rebuild.)"
+        fi
+        echo ""
+    fi
+
+    if [[ "$action" == "keep" ]]; then
+        echo "==> Keeping previously-built images from ${PREV_BUILD_DATE}."
+        if ! docker image inspect "$PREV_GNOLAND_IMAGE" >/dev/null 2>&1; then
+            echo "Error: previously-pinned image ${PREV_GNOLAND_IMAGE} is not present."
+            echo "  It may have been removed via 'make clean-images' or 'docker image prune'."
+            echo "  Options:"
+            echo "    - 'make start upgrade=1' to rebuild with the current state"
+            echo "    - 'make clone' first if you want to keep this run intact"
+            exit 1
+        fi
+        docker tag "$PREV_GNOLAND_IMAGE"    gno-cluster-gnoland:latest
+        docker tag "$PREV_WATCHTOWER_IMAGE" gno-cluster-watchtower:latest
+        docker tag "$PREV_SENTINEL_IMAGE"   gno-cluster-sentinel:latest
+        # Override the resolved commits with the pinned ones so any downstream
+        # user of GNO_COMMIT sees what's actually running.
+        export GNO_COMMIT="$PREV_GNO_COMMIT"
+        export WATCHTOWER_COMMIT="$PREV_WATCHTOWER_COMMIT"
+        echo ""
+        return
+    fi
+
+    # Rebuild (or first build). cmd_build is idempotent so no-ops when tags exist.
+    cmd_build
+    write_build_state "$state_file"
 }
 
 # ---- Create
@@ -301,15 +393,11 @@ cmd_create() {
         interactive=0
     fi
 
-    # cmd_create needs the gnoland image to generate keys and read back their
-    # metadata. Bootstrap only: if the image is missing, build once. If it
-    # exists, skip — rebuilding is make start's responsibility (using the run's
-    # pinned versions, which may differ from the project-root env).
-    if ! docker image inspect "$GNOLAND_IMAGE" >/dev/null 2>&1; then
-        echo "==> gnoland image not found, bootstrapping via build..."
-        cmd_build
-        echo ""
-    fi
+    # Resolve refs to commits and ensure images exist (idempotent). This pins the
+    # run to the exact commits we built against, which goes into .build-state.
+    resolve_commits
+    cmd_build
+    echo ""
 
     _ensure_node_secrets
     _print_node_info_table
@@ -363,6 +451,12 @@ cmd_create() {
         "$PROJECT_ROOT" "$GNO_REPO" "$GNO_VERSION" \
         "$NUM_NODES" "$TOPOLOGY" \
         "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$GRAFANA_PORT"
+
+    # Pin this run's build state so future make start invocations can detect drift.
+    local new_run
+    new_run=$(readlink "$CURRENT_LINK")
+    write_build_state "${new_run}/.build-state"
+
     echo ""
     echo "==> Run created. Run 'make start' to start the cluster."
 }
@@ -371,6 +465,7 @@ cmd_create() {
 
 cmd_start() {
     local run_arg="${1:-}"
+    local upgrade="${upgrade:-}"
 
     # Resume a specific run by name
     if [[ -n "$run_arg" ]]; then
@@ -379,8 +474,8 @@ cmd_start() {
             echo "Error: runs/${run_arg} not found."
             exit 1
         fi
-        # Source the run's cluster.env so subsequent build/preflight use the
-        # run's pinned topology, node count, and image versions.
+        # Source the run's cluster.env so downstream steps use the run's own
+        # topology, node count, and image versions (not the project-root ones).
         if [[ -f "${run_dir}/cluster.env" ]]; then
             # shellcheck disable=SC1091
             source "${run_dir}/cluster.env"
@@ -393,8 +488,8 @@ cmd_start() {
                 docker compose -f "${current}/docker-compose.yml" down
             fi
         fi
-        cmd_build
-        echo ""
+        resolve_commits
+        ensure_images_for_run "$run_dir" "$upgrade"
         check_network_capacity "$TOPOLOGY" "$NUM_NODES"
         echo "==> Resuming run: ${run_arg}"
         ln -sfn "$run_dir" "$CURRENT_LINK"
@@ -417,14 +512,12 @@ cmd_start() {
         echo "  Run 'make stop' first, or 'make start run=<folder>' to switch."
         return
     fi
-    # Source the run's cluster.env so subsequent build/preflight use the
-    # run's pinned topology, node count, and image versions.
     if [[ -f "${current}/cluster.env" ]]; then
         # shellcheck disable=SC1091
         source "${current}/cluster.env"
     fi
-    cmd_build
-    echo ""
+    resolve_commits
+    ensure_images_for_run "$current" "$upgrade"
     check_network_capacity "$TOPOLOGY" "$NUM_NODES"
     echo "==> Starting run: $(basename "$current")"
     docker compose -f "${current}/docker-compose.yml" up -d
