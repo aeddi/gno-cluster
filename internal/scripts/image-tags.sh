@@ -19,12 +19,19 @@
 # and changes per invocation, which would defeat the idempotency check.
 set -euo pipefail
 
-compute_build_hash_for() {
-    # Find all regular files under the given paths, sort for determinism,
-    # hash each file's contents, then hash the combined list.
+compute_file_hashes_for() {
+    # Enumerate regular files under the given paths in stable order and emit
+    # per-file sha256 lines ("<hash>  <path>"). This is the raw input to both
+    # compute_build_hash_for (for image tagging) and the .build-state snapshot
+    # (for human-readable drift reporting).
     find "$@" -type f -print0 \
         | LC_ALL=C sort -z \
-        | xargs -0 shasum -a 256 \
+        | xargs -0 shasum -a 256
+}
+
+compute_build_hash_for() {
+    # Short summary hash over the per-file hashes.
+    compute_file_hashes_for "$@" \
         | shasum -a 256 \
         | cut -c1-8
 }
