@@ -13,6 +13,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CURRENT_LINK="${PROJECT_ROOT}/runs/current"
 GNOLAND_IMAGE="gno-cluster-gnoland:latest"
 
+# shellcheck source=image-tags.sh
+source "${SCRIPT_DIR}/image-tags.sh"
 # shellcheck source=preflight.sh
 source "${SCRIPT_DIR}/preflight.sh"
 
@@ -97,7 +99,32 @@ validate_port_ranges() {
 
 # ---- Build
 
+# Builds one image target, or skips if a matching content-addressed tag already
+# exists. Always re-points :latest to the current tag so compose references
+# (which use :latest) pick up the freshest image.
+# Args: target tag force build_args...
+_build_image() {
+    local target="$1" tag="$2" force="$3"
+    shift 3
+    local image="gno-cluster-${target}:${tag}"
+    if [[ -z "$force" ]] && docker image inspect "$image" >/dev/null 2>&1; then
+        echo "==> ${target}: up to date (${tag})"
+        docker tag "$image" "gno-cluster-${target}:latest"
+        echo ""
+        return
+    fi
+    echo "==> Building ${target} image (${tag})..."
+    docker build -f internal/Dockerfile \
+        --target "$target" \
+        "$@" \
+        -t "$image" \
+        -t "gno-cluster-${target}:latest" \
+        .
+    echo ""
+}
+
 cmd_build() {
+    local force="${1:-}"
     echo "==> Resolving versions to commit hashes..."
 
     local gno_commit wt_commit build_date
@@ -114,39 +141,33 @@ cmd_build() {
     fi
 
     build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    local gnoland_tag watchtower_tag sentinel_tag
+    gnoland_tag=$(compute_image_tag gnoland "$gno_commit" "$wt_commit")
+    watchtower_tag=$(compute_image_tag watchtower "$gno_commit" "$wt_commit")
+    sentinel_tag=$(compute_image_tag sentinel "$gno_commit" "$wt_commit")
+
     echo "  gno:        ${GNO_REPO}@${GNO_VERSION} -> ${gno_commit:0:12}"
     echo "  watchtower: ${WATCHTOWER_REPO}@${WATCHTOWER_VERSION} -> ${wt_commit:0:12}"
     echo ""
 
-    echo "==> Building gnoland image..."
-    docker build -f internal/Dockerfile \
-        --target gnoland \
-        --build-arg GNO_REPO="${GNO_REPO}" \
-        --build-arg GNO_COMMIT_HASH="${gno_commit}" \
-        --build-arg GNO_VERSION="${GNO_VERSION}" \
-        --build-arg BUILD_DATE="${build_date}" \
-        -t gno-cluster-gnoland:latest .
-    echo ""
+    _build_image gnoland "$gnoland_tag" "$force" \
+        --build-arg "GNO_REPO=${GNO_REPO}" \
+        --build-arg "GNO_COMMIT_HASH=${gno_commit}" \
+        --build-arg "GNO_VERSION=${GNO_VERSION}" \
+        --build-arg "BUILD_DATE=${build_date}"
 
-    echo "==> Building watchtower image..."
-    docker build -f internal/Dockerfile \
-        --target watchtower \
-        --build-arg WATCHTOWER_REPO="${WATCHTOWER_REPO}" \
-        --build-arg WATCHTOWER_COMMIT_HASH="${wt_commit}" \
-        --build-arg WATCHTOWER_VERSION="${WATCHTOWER_VERSION}" \
-        --build-arg BUILD_DATE="${build_date}" \
-        -t gno-cluster-watchtower:latest .
-    echo ""
+    _build_image watchtower "$watchtower_tag" "$force" \
+        --build-arg "WATCHTOWER_REPO=${WATCHTOWER_REPO}" \
+        --build-arg "WATCHTOWER_COMMIT_HASH=${wt_commit}" \
+        --build-arg "WATCHTOWER_VERSION=${WATCHTOWER_VERSION}" \
+        --build-arg "BUILD_DATE=${build_date}"
 
-    echo "==> Building sentinel image..."
-    docker build -f internal/Dockerfile \
-        --target sentinel \
-        --build-arg WATCHTOWER_REPO="${WATCHTOWER_REPO}" \
-        --build-arg WATCHTOWER_COMMIT_HASH="${wt_commit}" \
-        --build-arg WATCHTOWER_VERSION="${WATCHTOWER_VERSION}" \
-        --build-arg BUILD_DATE="${build_date}" \
-        -t gno-cluster-sentinel:latest .
-    echo ""
+    _build_image sentinel "$sentinel_tag" "$force" \
+        --build-arg "WATCHTOWER_REPO=${WATCHTOWER_REPO}" \
+        --build-arg "WATCHTOWER_COMMIT_HASH=${wt_commit}" \
+        --build-arg "WATCHTOWER_VERSION=${WATCHTOWER_VERSION}" \
+        --build-arg "BUILD_DATE=${build_date}"
 
     echo "==> Build complete."
 }
@@ -465,7 +486,7 @@ command="${1:?Usage: cluster.sh <command> (build|init|start|stop|clone|status|lo
 shift || true
 
 case "$command" in
-    build)   cmd_build ;;
+    build)   cmd_build "$@" ;;
     init)    cmd_init ;;
     start)   cmd_start "$@" ;;
     stop)    cmd_stop ;;

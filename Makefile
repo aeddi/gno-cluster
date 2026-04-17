@@ -3,7 +3,7 @@
 # Usage: make <target> [args]
 #
 # Targets:
-#   build                     Build Docker images (gnoland, watchtower, sentinel)
+#   build    [force=1]        Build Docker images (skip if up to date; force=1 rebuilds)
 #   init                      Generate node secrets (keys, node IDs)
 #   start    [run=<folder>]   Start a new cluster or resume current or specified past run
 #   stop                      Stop the cluster (data is preserved)
@@ -46,7 +46,7 @@ help:
 	@awk '/^# Usage:/,/^$$/{sub(/^# ?/,""); print}' $(MAKEFILE_LIST)
 
 build:
-	@$(CLUSTER) build
+	@$(CLUSTER) build $(force)
 
 init:
 	@$(CLUSTER) init
@@ -70,5 +70,5 @@ infos:
 	@$(CLUSTER) infos
 
 update:
-	@$(CLUSTER) build
+	@$(CLUSTER) build $(force)
 	@$(CLUSTER) update
