@@ -13,6 +13,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CURRENT_LINK="${PROJECT_ROOT}/runs/current"
 GNOLAND_IMAGE="gno-cluster-gnoland:latest"
 
+# Fix the docker compose project name so networks have stable names across runs.
+# Only one run can be active at a time (host ports collide), so reusing network
+# slots is safe and prevents cross-run leakage when stop/start uses different
+# run folders. Without this, compose derives the project name from the compose
+# file's parent directory (the timestamped run folder), creating a fresh set of
+# networks for every run.
+export COMPOSE_PROJECT_NAME=gno-cluster
+
 # ---- Helpers
 
 gnoland_run() {
