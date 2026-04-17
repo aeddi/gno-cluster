@@ -12,6 +12,9 @@
 #   logs     svc=<service>    Follow logs for a service
 #   infos                     Print node addresses, pubkeys, ports, and IDs
 #   update                    Rebuild images and restart the cluster
+#   clean-images              Remove all gno-cluster Docker images
+#   clean-runs    [yes=1]     Remove all run folders (prompts unless yes=1)
+#   clean         [yes=1]     Run clean-runs then clean-images
 #   help                      Show this help message
 #
 # Configuration:
@@ -40,7 +43,7 @@ export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GRAFANA_PO
 CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 
 .DEFAULT_GOAL := help
-.PHONY: help build init start stop clone status logs infos update
+.PHONY: help build init start stop clone status logs infos update clean clean-runs clean-images
 
 help:
 	@awk '/^# Usage:/,/^$$/{sub(/^# ?/,""); print}' $(MAKEFILE_LIST)
@@ -72,3 +75,12 @@ infos:
 update:
 	@$(CLUSTER) build $(force)
 	@$(CLUSTER) update
+
+clean-images:
+	@$(CLUSTER) clean-images
+
+clean-runs:
+	@$(CLUSTER) clean-runs $(yes)
+
+clean:
+	@$(CLUSTER) clean $(yes)

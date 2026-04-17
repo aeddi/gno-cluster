@@ -480,21 +480,98 @@ cmd_update() {
     echo "==> Updated and restarted."
 }
 
+# ---- Clean
+
+cmd_clean_images() {
+    local images
+    images=$(docker images --filter "reference=gno-cluster-*" -q 2>/dev/null | sort -u)
+    if [[ -z "$images" ]]; then
+        echo "==> No gno-cluster images to remove."
+        return
+    fi
+    local count
+    count=$(echo "$images" | grep -c . || true)
+    echo "==> Removing ${count} gno-cluster image(s)..."
+    echo "$images" | xargs docker rmi -f >/dev/null
+    echo "==> Done."
+}
+
+cmd_clean_runs() {
+    local yes="${1:-}"
+
+    local runs=()
+    if [[ -d runs ]]; then
+        local entry
+        for entry in runs/*; do
+            [[ -d "$entry" && ! -L "$entry" ]] && runs+=("$entry")
+        done
+    fi
+
+    local count=${#runs[@]}
+    if ((count == 0)); then
+        echo "==> No runs to remove."
+        return
+    fi
+
+    if [[ -z "$yes" ]]; then
+        if [[ ! -t 0 ]]; then
+            echo "Error: clean-runs requires yes=1 in non-interactive mode (${count} run folder(s) would be removed)." >&2
+            return 1
+        fi
+        echo "About to remove ${count} run folder(s):"
+        local r
+        for r in "${runs[@]}"; do echo "  $r"; done
+        local ans
+        read -r -p "Proceed? [y/N] " ans
+        if [[ "$ans" != "y" && "$ans" != "Y" ]]; then
+            echo "Aborted."
+            return
+        fi
+    fi
+
+    if [[ -L "$CURRENT_LINK" ]]; then
+        local current
+        current=$(readlink "$CURRENT_LINK")
+        if is_running "${current}/docker-compose.yml"; then
+            echo "==> Stopping current run..."
+            docker compose -f "${current}/docker-compose.yml" down
+        fi
+    fi
+
+    echo "==> Removing ${count} run folder(s)..."
+    rm -f "$CURRENT_LINK"
+    local r
+    for r in "${runs[@]}"; do
+        rm -rf "$r"
+        echo "    removed $r"
+    done
+    echo "==> Done."
+}
+
+cmd_clean() {
+    local yes="${1:-}"
+    cmd_clean_runs "$yes"
+    cmd_clean_images
+}
+
 # ---- Dispatch
 
-command="${1:?Usage: cluster.sh <command> (build|init|start|stop|clone|status|logs|infos|update)}"
+command="${1:?Usage: cluster.sh <command> (build|init|start|stop|clone|status|logs|infos|update|clean|clean-runs|clean-images)}"
 shift || true
 
 case "$command" in
-    build)   cmd_build "$@" ;;
-    init)    cmd_init ;;
-    start)   cmd_start "$@" ;;
-    stop)    cmd_stop ;;
-    clone)   cmd_clone "$@" ;;
-    status)  cmd_status "$@" ;;
-    logs)    cmd_logs "$@" ;;
-    infos)   cmd_infos ;;
-    update)  cmd_update ;;
+    build)        cmd_build "$@" ;;
+    init)         cmd_init ;;
+    start)        cmd_start "$@" ;;
+    stop)         cmd_stop ;;
+    clone)        cmd_clone "$@" ;;
+    status)       cmd_status "$@" ;;
+    logs)         cmd_logs "$@" ;;
+    infos)        cmd_infos ;;
+    update)       cmd_update ;;
+    clean)        cmd_clean "$@" ;;
+    clean-runs)   cmd_clean_runs "$@" ;;
+    clean-images) cmd_clean_images ;;
     *)
         echo "Unknown command: ${command}"
         echo "Run 'make help' for usage."
