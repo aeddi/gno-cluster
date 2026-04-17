@@ -76,9 +76,9 @@ PREV_WATCHTOWER_COMMIT="$WATCHTOWER_COMMIT"
 PREV_CONTENT_HASH=$(compute_build_hash)
 PREV_CONTENT_FILES=()
 while IFS= read -r l; do PREV_CONTENT_FILES+=("$l"); done < <(compute_file_hashes_for \
-    "$PROJECT_ROOT/internal/Dockerfile" \
-    "$PROJECT_ROOT/internal/docker" \
-    "$PROJECT_ROOT/internal/scripts/parse-overrides.sh")
+    "internal/Dockerfile" \
+    "internal/docker" \
+    "internal/scripts/parse-overrides.sh")
 
 set +e
 summary=$(build_state_drift_summary)

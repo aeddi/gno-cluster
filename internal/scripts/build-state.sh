@@ -40,9 +40,9 @@ write_build_state() {
     watchtower_tag=$(compute_image_tag watchtower "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
     sentinel_tag=$(compute_image_tag sentinel "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
     file_lines=$(compute_file_hashes_for \
-        "${PROJECT_ROOT}/internal/Dockerfile" \
-        "${PROJECT_ROOT}/internal/docker" \
-        "${PROJECT_ROOT}/internal/scripts/parse-overrides.sh")
+        "internal/Dockerfile" \
+        "internal/docker" \
+        "internal/scripts/parse-overrides.sh")
 
     local tmp
     tmp=$(mktemp "${out_file}.tmp.XXXXXX")
@@ -182,9 +182,9 @@ _fetch_and_indent_titles() {
 _summarize_content_drift() {
     local current_lines prev_paths=() prev_hashes=() path hash
     current_lines=$(compute_file_hashes_for \
-        "${PROJECT_ROOT}/internal/Dockerfile" \
-        "${PROJECT_ROOT}/internal/docker" \
-        "${PROJECT_ROOT}/internal/scripts/parse-overrides.sh" 2>/dev/null) || return 0
+        "internal/Dockerfile" \
+        "internal/docker" \
+        "internal/scripts/parse-overrides.sh" 2>/dev/null) || return 0
 
     # Parse prev into parallel arrays
     local entry rest

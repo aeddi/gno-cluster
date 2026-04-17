@@ -15,34 +15,49 @@ echo "-- compute_build_hash_for --"
 FIX=$(mktemp -d)
 trap 'rm -rf "$FIX"' EXIT
 
+# compute_file_hashes_for resolves relative paths against PROJECT_ROOT.
+PROJECT_ROOT="$FIX"
+export PROJECT_ROOT
+
 mkdir -p "$FIX/a" "$FIX/b"
 echo "alpha" > "$FIX/a/one.txt"
 echo "beta" > "$FIX/a/two.txt"
 echo "gamma" > "$FIX/b/three.txt"
 
-hash1=$(compute_build_hash_for "$FIX/a" "$FIX/b")
+hash1=$(compute_build_hash_for "a" "b")
 
 # Same inputs → same hash
-hash2=$(compute_build_hash_for "$FIX/a" "$FIX/b")
+hash2=$(compute_build_hash_for "a" "b")
 assert_eq "deterministic" "$hash1" "$hash2"
 
 # Change a file → different hash
 echo "changed" > "$FIX/a/one.txt"
-hash3=$(compute_build_hash_for "$FIX/a" "$FIX/b")
+hash3=$(compute_build_hash_for "a" "b")
 [[ "$hash3" != "$hash1" ]]
 assert_eq "sensitive to file content" "0" "$?"
 
 # Revert → original hash
 echo "alpha" > "$FIX/a/one.txt"
-hash4=$(compute_build_hash_for "$FIX/a" "$FIX/b")
+hash4=$(compute_build_hash_for "a" "b")
 assert_eq "reverting restores hash" "$hash1" "$hash4"
 
 # Add a file → different hash
 echo "delta" > "$FIX/a/four.txt"
-hash5=$(compute_build_hash_for "$FIX/a" "$FIX/b")
+hash5=$(compute_build_hash_for "a" "b")
 [[ "$hash5" != "$hash1" ]]
 assert_eq "sensitive to new files" "0" "$?"
 rm "$FIX/a/four.txt"
+
+# Portability: moving PROJECT_ROOT to a different path must not change the hash
+# (paths emitted are relative, so the aggregate is location-independent).
+MOVED=$(mktemp -d)
+trap 'rm -rf "$FIX" "$MOVED"' EXIT
+cp -R "$FIX/a" "$FIX/b" "$MOVED/"
+PROJECT_ROOT_SAVE="$PROJECT_ROOT"
+PROJECT_ROOT="$MOVED"
+hash_moved=$(compute_build_hash_for "a" "b")
+PROJECT_ROOT="$PROJECT_ROOT_SAVE"
+assert_eq "hash stable across PROJECT_ROOT move" "$hash1" "$hash_moved"
 
 # Hash is 8 hex chars
 hash_len=${#hash1}
@@ -54,7 +69,6 @@ assert_eq "hash is hex" "0" "$?"
 echo "-- compute_image_tag --"
 
 # Override PROJECT_ROOT so compute_image_tag's internal call to compute_build_hash is stable.
-PROJECT_ROOT="$FIX"
 mkdir -p "$FIX/internal/docker" "$FIX/internal/scripts"
 echo "FROM alpine:3" > "$FIX/internal/Dockerfile"
 echo "echo hi" > "$FIX/internal/docker/gnoland-entrypoint.sh"

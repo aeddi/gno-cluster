@@ -25,9 +25,10 @@ source "${_IMAGE_TAGS_DIR}/common.sh"
 
 compute_file_hashes_for() {
     # Enumerate regular files under the given paths in stable order and emit
-    # per-file sha256 lines ("<hash>  <path>"). This is the raw input to both
-    # compute_build_hash_for (for image tagging) and the .build-state snapshot
-    # (for human-readable drift reporting).
+    # per-file sha256 lines ("<hash>  <path>"). Paths are always relative to
+    # PROJECT_ROOT so the aggregate hash (and the .build-state snapshot) stay
+    # stable if the project moves on disk. Callers pass paths relative to
+    # PROJECT_ROOT (e.g. "internal/Dockerfile"), not absolute.
     #
     # xargs can't invoke bash functions, so pick the external sha256 tool once
     # and pass it directly. sha_cmd is deliberately unquoted in the xargs call
@@ -42,9 +43,12 @@ compute_file_hashes_for() {
         return 1
     fi
     # shellcheck disable=SC2086
-    find "$@" -type f -print0 \
-        | LC_ALL=C sort -z \
-        | xargs -0 $sha_cmd
+    (
+        cd "$PROJECT_ROOT" \
+            && find "$@" -type f -print0 \
+            | LC_ALL=C sort -z \
+            | xargs -0 $sha_cmd
+    )
 }
 
 compute_build_hash_for() {
@@ -56,9 +60,9 @@ compute_build_hash_for() {
 
 compute_build_hash() {
     compute_build_hash_for \
-        "${PROJECT_ROOT}/internal/Dockerfile" \
-        "${PROJECT_ROOT}/internal/docker" \
-        "${PROJECT_ROOT}/internal/scripts/parse-overrides.sh"
+        "internal/Dockerfile" \
+        "internal/docker" \
+        "internal/scripts/parse-overrides.sh"
 }
 
 compute_image_tag() {
