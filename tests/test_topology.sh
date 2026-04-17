@@ -12,14 +12,20 @@ echo "=== topology.sh ==="
 # ---- get_networks
 echo "-- get_networks --"
 
+# Mesh uses a single shared network (every pair is allowed, so no edge isolation needed)
 result=$(get_networks mesh 3)
-assert_line_count "mesh 3: 3 networks" "3" "$result"
-assert_contains "mesh 3: net-1-2" "net-1-2 1 2" "$result"
-assert_contains "mesh 3: net-1-3" "net-1-3 1 3" "$result"
-assert_contains "mesh 3: net-2-3" "net-2-3 2 3" "$result"
+assert_line_count "mesh 3: 1 shared network" "1" "$result"
+assert_contains "mesh 3: net-mesh" "net-mesh" "$result"
 
 result=$(get_networks mesh 4)
-assert_line_count "mesh 4: 6 networks" "6" "$result"
+assert_line_count "mesh 4: 1 shared network" "1" "$result"
+
+result=$(get_networks mesh 2)
+assert_line_count "mesh 2: 1 shared network" "1" "$result"
+
+# Single node: no peers, no network
+result=$(get_networks mesh 1)
+assert_eq "mesh 1: empty" "" "$result"
 
 result=$(get_networks star 4)
 assert_line_count "star 4: 3 networks" "3" "$result"
@@ -70,9 +76,10 @@ assert_eq "ring 4: node-4 peers" "3 1" "$result"
 echo "-- get_node_networks --"
 
 result=$(get_node_networks mesh 3 2)
-assert_contains "mesh 3 node-2: net-1-2" "net-1-2" "$result"
-assert_contains "mesh 3 node-2: net-2-3" "net-2-3" "$result"
-assert_not_contains "mesh 3 node-2: not net-1-3" "net-1-3" "$result"
+assert_eq "mesh 3 node-2: only net-mesh" "net-mesh" "$result"
+
+result=$(get_node_networks mesh 4 1)
+assert_eq "mesh 4 node-1: only net-mesh" "net-mesh" "$result"
 
 result=$(get_node_networks star 4 1)
 assert_contains "star 4 node-1: net-1-2" "net-1-2" "$result"
