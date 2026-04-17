@@ -13,6 +13,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CURRENT_LINK="${PROJECT_ROOT}/runs/current"
 GNOLAND_IMAGE="gno-cluster-gnoland:latest"
 
+# shellcheck source=preflight.sh
+source "${SCRIPT_DIR}/preflight.sh"
+
 # Fix the docker compose project name so networks have stable names across runs.
 # Only one run can be active at a time (host ports collide), so reusing network
 # slots is safe and prevents cross-run leakage when stop/start uses different
@@ -195,9 +198,15 @@ cmd_start() {
 
     # Resume a specific run by name
     if [[ -n "$run_arg" ]]; then
-        if [[ ! -d "runs/${run_arg}" ]]; then
+        local run_dir="${PROJECT_ROOT}/runs/${run_arg}"
+        if [[ ! -d "$run_dir" ]]; then
             echo "Error: runs/${run_arg} not found."
             exit 1
+        fi
+        # Align preflight with the run's actual topology/N
+        if [[ -f "${run_dir}/cluster.env" ]]; then
+            # shellcheck disable=SC1091
+            source "${run_dir}/cluster.env"
         fi
         if [[ -L "$CURRENT_LINK" ]]; then
             local current
@@ -207,8 +216,9 @@ cmd_start() {
                 docker compose -f "${current}/docker-compose.yml" down
             fi
         fi
+        check_network_capacity "$TOPOLOGY" "$NUM_NODES"
         echo "==> Resuming run: ${run_arg}"
-        ln -sfn "${PROJECT_ROOT}/runs/${run_arg}" "$CURRENT_LINK"
+        ln -sfn "$run_dir" "$CURRENT_LINK"
         docker compose -f "${CURRENT_LINK}/docker-compose.yml" up -d
         echo "==> Run resumed."
         return
@@ -240,6 +250,12 @@ cmd_start() {
             echo "  Run 'make stop' first, or 'make start run=<folder>' to switch."
             return
         fi
+        # Align preflight with the run's actual topology/N
+        if [[ -f "${current}/cluster.env" ]]; then
+            # shellcheck disable=SC1091
+            source "${current}/cluster.env"
+        fi
+        check_network_capacity "$TOPOLOGY" "$NUM_NODES"
         echo "==> Resuming stopped run: $(basename "$current")"
         docker compose -f "${current}/docker-compose.yml" up -d
         echo "==> Run resumed."
@@ -247,6 +263,7 @@ cmd_start() {
     fi
 
     # Create fresh run
+    check_network_capacity "$TOPOLOGY" "$NUM_NODES"
     bash "${SCRIPT_DIR}/create-run.sh" \
         "$PROJECT_ROOT" "$GNO_REPO" "$GNO_VERSION" \
         "$NUM_NODES" "$TOPOLOGY" \
