@@ -52,14 +52,14 @@ Open Grafana at [http://localhost:3000](http://localhost:3000) (anonymous access
 | `make help` | Show available commands |
 | `make build [force=1]` | Build Docker images. Skips each image whose content-addressed tag already exists; `force=1` rebuilds unconditionally. |
 | `make create [yes=1]` | Create a new run: ensures node secrets exist, prints validator info, inspects `genesis.json` (prompts unless `yes=1` or non-TTY), writes the run folder. Does not start containers. Bootstrap-builds images if none exist. |
-| `make start [run=<folder>]` | Start the current run, or switch to and start a past run. Re-runs `make build` against the run's pinned versions, so switching between runs with different `GNO_VERSION` works correctly. |
+| `make start [run=<folder>]` | Start the current run, or switch to and start a past run. If the run's pinned build state has drifted, prints the diff and suggests `make clone` / `make update`, then starts with the pinned images anyway — never rebuilds. |
 | `make stop` | Stop the cluster (data is preserved in the run folder). |
 | `make status [watch=<sec>]` | Show each node's block height, peer count, and status. With `watch=` the display refreshes every N seconds. |
 | `make logs svc=<service>` | Follow logs for a specific service (e.g. `node-1`, `sentinel-1`, `watchtower`, `grafana`). |
 | `make infos` | Print node addresses, pubkeys, ports, and IDs. |
 | `make clone [run=<folder>]` | Duplicate the current (or specified) run with fresh chain state. |
-| `make update [force=1]` | Rebuild images and restart the cluster. |
-| `make clean-imgs` | Remove all `gno-cluster-*` Docker images. |
+| `make update [run=<folder>]` | If the run's pinned build state has drifted, print the diff, rebuild images, refresh the pin, and restart. No-op (prints "Nothing to update.") when nothing has changed. Targets the current run unless `run=` is given. |
+| `make clean-imgs [yes=1]` | Remove all `gno-cluster-*` Docker images. Prompts unless `yes=1`; refuses in non-TTY mode without `yes=1`. |
 | `make clean-runs [yes=1]` | Remove all run folders. Prompts unless `yes=1`; refuses in non-TTY mode without `yes=1`. |
 | `make clean [yes=1]` | `clean-runs` then `clean-imgs`. |
 
@@ -141,7 +141,7 @@ The folder contains snapshots of all configs, generated compose and monitoring c
 
 - `make create` — creates a new run folder and points `runs/current` at it. Does not start containers.
 - `make start` — starts the current run. First time (after `make create`) brings containers up; subsequent calls resume after a `make stop`.
-- `make start run=<folder>` — switch `runs/current` to a past run, then start. Rebuilds images to match that run's pinned versions if they aren't already present locally.
+- `make start run=<folder>` — switch `runs/current` to a past run, then start. Boots with that run's pinned images; if the pinned images have been pruned, `make start` asks you to run `make update` to rebuild them.
 - `make stop` — stops the cluster; all data is preserved in the run folder.
 - `make clone [run=<folder>]` — duplicate a run with fresh chain state (same keys, same configs, empty blockchain). Useful for restarting the same setup without regenerating keys or genesis.
 

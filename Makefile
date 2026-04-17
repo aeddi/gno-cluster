@@ -2,27 +2,27 @@
 #
 # Usage: make <target> [args]
 #
-# Targets:
-#   build    [force=1]        Build Docker images (skip if up to date; force=1 rebuilds)
-#   create   [yes=1]          Create a new run (keys + run folder; bootstrap-builds if no image)
-#   start    [run=<folder>] [upgrade=1]
-#                             Start the current run (or switch to a past run). Rebuilds if the
-#                             run's pinned state drifted; prompts unless upgrade=1 (default: keep).
-#   stop                      Stop the cluster (data is preserved)
-#   clone    [run=<folder>]   Clone current or specified past run with fresh chain state
-#   status   [watch=<sec>]    Show each node's block height, peers, and status
-#   logs     svc=<service>    Follow logs for a service
-#   infos                     Print node addresses, pubkeys, ports, and IDs
-#   update                    Rebuild images and restart the cluster
-#   clean-imgs              Remove all gno-cluster Docker images
-#   clean-runs    [yes=1]     Remove all run folders (prompts unless yes=1)
-#   clean         [yes=1]     Run clean-runs then clean-imgs
-#   help                      Show this help message
+# Run lifecycle:
+#   create       [yes=1]          Create a new run (yes=1 skips the genesis prompt)
+#   clone        [run=<folder>]   Clone a run with fresh chain state (run= targets a past run, else current)
+#   update       [run=<folder>]   Rebuild drifted images and restart (run= targets a past run, else current)
 #
-# Configuration:
-#   cluster.env               Environment variables (copy from cluster.env.example)
-#   config.overrides          Per-node gnoland config (copy from config.overrides.example)
-#   genesis.json              Chain genesis file (user-provided)
+# Cluster ops:
+#   start        [run=<folder>]   Start a run (run= switches to a past run, else current)
+#   stop                          Stop the current run
+#   infos        [run=<folder>]   Print node addresses, pubkeys, ports (run= targets a past run, else current)
+#   status       [watch=<sec>]    Show nodes' block height, peers, and status (watch= refreshes every N seconds)
+#   logs         svc=<service>    Follow logs for a service (svc= is required, e.g. node-1, watchtower)
+#
+# Cleanup:
+#   clean-imgs   [yes=1]          Remove all gno-cluster Docker images (yes=1 skips the prompt)
+#   clean-runs   [yes=1]          Remove all run folders (yes=1 skips the prompt)
+#   clean        [yes=1]          Run clean-runs then clean-imgs (yes=1 skips the prompt)
+#
+# Config files:
+#   cluster.env                   Environment variables (copy from cluster.env.example)
+#   config.overrides              Per-node gnoland config (copy from config.overrides.example)
+#   genesis.json                  Chain genesis file (user-provided)
 
 -include cluster.env
 
@@ -51,14 +51,11 @@ CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 help:
 	@awk '/^# Usage:/,/^$$/{sub(/^# ?/,""); print}' $(MAKEFILE_LIST)
 
-build:
-	@$(CLUSTER) build $(force)
-
 create:
 	@$(CLUSTER) create $(yes)
 
 start:
-	@upgrade=$(upgrade) $(CLUSTER) start $(run)
+	@$(CLUSTER) start $(run)
 
 stop:
 	@$(CLUSTER) stop
@@ -73,17 +70,21 @@ logs:
 	@$(CLUSTER) logs $(svc)
 
 infos:
-	@$(CLUSTER) infos
+	@$(CLUSTER) infos $(run)
 
 update:
-	@$(CLUSTER) build $(force)
-	@$(CLUSTER) update
+	@$(CLUSTER) update $(run)
 
 clean-imgs:
-	@$(CLUSTER) clean-imgs
+	@$(CLUSTER) clean-imgs $(yes)
 
 clean-runs:
 	@$(CLUSTER) clean-runs $(yes)
 
 clean:
 	@$(CLUSTER) clean $(yes)
+
+# build is an implementation detail of create/update. Kept here so it can still
+# be invoked directly (e.g. for debugging), but hidden from `make help`.
+build:
+	@$(CLUSTER) build $(force)

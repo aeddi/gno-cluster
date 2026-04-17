@@ -2,7 +2,8 @@
 # internal/scripts/cluster.sh — Main entry point for gno-cluster operations.
 #
 # Usage: cluster.sh <command> [args]
-# Commands: build, init, start, stop, clone, status, logs, infos, update
+# Commands: build, create, start, stop, clone, status, logs, infos, update,
+#           clean, clean-runs, clean-imgs
 #
 # Expects environment variables (set by Makefile or cluster.env):
 #   PROJECT_ROOT, GNO_VERSION, GNO_REPO, WATCHTOWER_VERSION, WATCHTOWER_REPO,
@@ -189,81 +190,61 @@ cmd_build() {
     echo "==> Build complete."
 }
 
-# Ensures images are ready for starting a run. Reads run's .build-state (if any),
-# compares against current env state, prompts on drift, then either rebuilds
-# (updating .build-state) or re-tags the pinned images as :latest.
+# Ensures images are ready for starting a run.
+#
+# Reads the run's .build-state, compares it against current env state, prints a
+# drift summary (with a suggestion to run `make clone` and/or `make update`) if
+# anything differs, then re-tags the pinned images as :latest so compose picks
+# them up. Never rebuilds — drift resolution belongs to `make update`.
+#
+# Backward compat: if .build-state is missing (legacy runs), cmd_build is
+# invoked to ensure images exist for the current env, then the state is written.
 # Expects: GNO_COMMIT and WATCHTOWER_COMMIT already resolved in env.
-# Args: run_dir [upgrade_flag]
 ensure_images_for_run() {
-    local run_dir="$1" upgrade="${2:-}"
+    local run_dir="$1"
     local state_file="${run_dir}/.build-state"
 
-    # Load previous build state into PREV_* vars (empty if no prior state).
-    local prev_output has_prev=0
-    if prev_output=$(read_build_state_as_prev "$state_file"); then
-        eval "$prev_output"
-        has_prev=1
-    fi
-
-    local drift_summary="" has_drift=0
-    if ((has_prev)); then
-        set +e
-        drift_summary=$(build_state_drift_summary)
-        has_drift=$?
-        set -e
-    fi
-
-    local action="rebuild"
-    if ((has_drift)); then
-        echo "==> Build state changed since last build (${PREV_BUILD_DATE})."
-        echo ""
-        echo "$drift_summary"
-        echo ""
-        echo "    To preserve this run and try the new build separately:"
-        echo "      make clone     # new run from this one"
-        echo "      make start     # starts the clone with the new build"
-        echo ""
-        if [[ -n "$upgrade" ]]; then
-            action="rebuild"
-            echo "    upgrade=1 → rebuilding with new state."
-        elif [[ -t 0 ]]; then
-            local ans
-            read -r -p "    Rebuild this run with the new state? [r/K] " ans
-            case "$ans" in
-                r|R|rebuild|y|Y|yes) action="rebuild" ;;
-                *) action="keep" ;;
-            esac
-        else
-            action="keep"
-            echo "    (non-TTY: keeping previously-built images. Set upgrade=1 to rebuild.)"
-        fi
-        echo ""
-    fi
-
-    if [[ "$action" == "keep" ]]; then
-        echo "==> Keeping previously-built images from ${PREV_BUILD_DATE}."
-        if ! docker image inspect "$PREV_GNOLAND_IMAGE" >/dev/null 2>&1; then
-            echo "Error: previously-pinned image ${PREV_GNOLAND_IMAGE} is not present."
-            echo "  It may have been removed via 'make clean-imgs' or 'docker image prune'."
-            echo "  Options:"
-            echo "    - 'make start upgrade=1' to rebuild with the current state"
-            echo "    - 'make clone' first if you want to keep this run intact"
-            exit 1
-        fi
-        docker tag "$PREV_GNOLAND_IMAGE"    gno-cluster-gnoland:latest
-        docker tag "$PREV_WATCHTOWER_IMAGE" gno-cluster-watchtower:latest
-        docker tag "$PREV_SENTINEL_IMAGE"   gno-cluster-sentinel:latest
-        # Override the resolved commits with the pinned ones so any downstream
-        # user of GNO_COMMIT sees what's actually running.
-        export GNO_COMMIT="$PREV_GNO_COMMIT"
-        export WATCHTOWER_COMMIT="$PREV_WATCHTOWER_COMMIT"
-        echo ""
+    if [[ ! -f "$state_file" ]]; then
+        echo "==> No pinned build state for this run — building and pinning now."
+        cmd_build
+        write_build_state "$state_file"
         return
     fi
 
-    # Rebuild (or first build). cmd_build is idempotent so no-ops when tags exist.
-    cmd_build
-    write_build_state "$state_file"
+    local prev_output
+    prev_output=$(read_build_state_as_prev "$state_file")
+    eval "$prev_output"
+
+    local drift_summary="" has_drift=0
+    set +e
+    drift_summary=$(build_state_drift_summary)
+    has_drift=$?
+    set -e
+
+    if ((has_drift)); then
+        echo "==> Build state drifted since last build (${PREV_BUILD_DATE})."
+        echo ""
+        echo "$drift_summary"
+        echo ""
+        echo "    This run will start with its pinned images. To act on the drift:"
+        echo "      make clone     # fork this run, then 'make update' the clone"
+        echo "      make update    # rebuild and restart this run in place"
+        echo ""
+    fi
+
+    if ! docker image inspect "$PREV_GNOLAND_IMAGE" >/dev/null 2>&1; then
+        echo "Error: pinned image ${PREV_GNOLAND_IMAGE} is not present."
+        echo "  It may have been removed via 'make clean-imgs' or 'docker image prune'."
+        echo "  Run 'make update' to rebuild this run's images."
+        exit 1
+    fi
+    docker tag "$PREV_GNOLAND_IMAGE"    gno-cluster-gnoland:latest
+    docker tag "$PREV_WATCHTOWER_IMAGE" gno-cluster-watchtower:latest
+    docker tag "$PREV_SENTINEL_IMAGE"   gno-cluster-sentinel:latest
+    # Override the resolved commits with the pinned ones so any downstream
+    # user of GNO_COMMIT sees what's actually running.
+    export GNO_COMMIT="$PREV_GNO_COMMIT"
+    export WATCHTOWER_COMMIT="$PREV_WATCHTOWER_COMMIT"
 }
 
 # ---- Create
@@ -465,7 +446,6 @@ cmd_create() {
 
 cmd_start() {
     local run_arg="${1:-}"
-    local upgrade="${upgrade:-}"
 
     # Resume a specific run by name
     if [[ -n "$run_arg" ]]; then
@@ -489,7 +469,7 @@ cmd_start() {
             fi
         fi
         resolve_commits
-        ensure_images_for_run "$run_dir" "$upgrade"
+        ensure_images_for_run "$run_dir"
         check_network_capacity "$TOPOLOGY" "$NUM_NODES"
         echo "==> Resuming run: ${run_arg}"
         ln -sfn "$run_dir" "$CURRENT_LINK"
@@ -517,7 +497,7 @@ cmd_start() {
         source "${current}/cluster.env"
     fi
     resolve_commits
-    ensure_images_for_run "$current" "$upgrade"
+    ensure_images_for_run "$current"
     check_network_capacity "$TOPOLOGY" "$NUM_NODES"
     echo "==> Starting run: $(basename "$current")"
     docker compose -f "${current}/docker-compose.yml" up -d
@@ -584,7 +564,7 @@ cmd_clone() {
 
     # Copy configs
     echo "  Copying configs..."
-    for f in genesis.json cluster.env config.overrides docker-compose.yml watchtower.toml loki-config.yml; do
+    for f in genesis.json cluster.env config.overrides docker-compose.yml watchtower.toml loki-config.yml .build-state; do
         if [[ -f "${source_dir}/${f}" ]]; then cp "${source_dir}/${f}" "${new_dir}/${f}"; fi
     done
     cp "${source_dir}"/sentinel-*-config.toml "${new_dir}/" 2>/dev/null || true
@@ -612,7 +592,9 @@ cmd_clone() {
 # Renders the status table once. In watch mode, appends \033[K (clear to EOL)
 # to each line so shorter values don't leave stale characters.
 render_status() {
-    local nodes="$1" rpc_base="$2" eol="${3:-}"
+    local nodes="$1" rpc_base="$2" run_name="$3" eol="${4:-}"
+    printf "Run: %s${eol}\n" "$run_name"
+    printf "${eol}\n"
     printf "%-10s %-12s %-8s %-24s %s${eol}\n" "Node" "Status" "Height" "Latest Block" "Peers"
     printf "%-10s %-12s %-8s %-24s %s${eol}\n" "----" "------" "------" "------------" "-----"
 
@@ -646,6 +628,8 @@ cmd_status() {
     . "${current}/cluster.env" 2>/dev/null || true
 
     local nodes="${NUM_NODES}" rpc_base="${GNOLAND_RPC_PORT_BASE}"
+    local run_name
+    run_name=$(basename "$current")
     local watch_interval="${1:-}"
 
     if [[ -n "$watch_interval" ]]; then
@@ -657,11 +641,11 @@ cmd_status() {
         while true; do
             printf '\033[H'
             printf "Refreshing every %ss (Ctrl+C to stop)${eol}\n\n" "$watch_interval"
-            render_status "$nodes" "$rpc_base" "$eol"
+            render_status "$nodes" "$rpc_base" "$run_name" "$eol"
             sleep "$watch_interval"
         done
     else
-        render_status "$nodes" "$rpc_base"
+        render_status "$nodes" "$rpc_base" "$run_name"
     fi
 }
 
@@ -681,41 +665,271 @@ cmd_logs() {
 
 # ---- Infos
 
+# ANSI color wrapper; outputs plain text when stdout isn't a TTY so piped output
+# stays clean.
+_color() {
+    local code="$1" text="$2"
+    if [[ -t 1 ]]; then
+        printf '\033[%sm%s\033[0m' "$code" "$text"
+    else
+        printf '%s' "$text"
+    fi
+}
+
+# Parses the "YYYY-MM-DD_HH-MM-SS" prefix of a run folder name into a readable
+# timestamp. Folder-name-based so it doesn't depend on filesystem mtime.
+_run_creation_date() {
+    local name="$1"
+    if [[ "$name" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})_([0-9]{2})-([0-9]{2})-([0-9]{2}) ]]; then
+        echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]}:${BASH_REMATCH[3]}:${BASH_REMATCH[4]}"
+    else
+        echo "unknown"
+    fi
+}
+
+# Human-readable directory size, or "-" if missing.
+_dir_size() {
+    local d="$1"
+    if [[ -d "$d" ]]; then
+        du -sh "$d" 2>/dev/null | awk '{print $1}'
+    else
+        echo "-"
+    fi
+}
+
+# Reads the height from priv_validator_state.json, or "-" if unavailable.
+_last_block_height() {
+    local f="$1"
+    [[ -f "$f" ]] || { echo "-"; return; }
+    jq -r '.height // "-"' "$f" 2>/dev/null || echo "-"
+}
+
+_infos_header() {
+    local run_dir="$1"
+    local name date_str state height loki_sz vm_sz
+    name=$(basename "$run_dir")
+    date_str=$(_run_creation_date "$name")
+    if is_running "${run_dir}/docker-compose.yml"; then
+        state=$(_color 32 "running")
+    else
+        state=$(_color 31 "stopped")
+    fi
+    height=$(_last_block_height "${run_dir}/gnoland-data-1/secrets/priv_validator_state.json")
+    loki_sz=$(_dir_size "${run_dir}/loki-data")
+    vm_sz=$(_dir_size "${run_dir}/victoria-data")
+
+    echo "==> Run: ${name}"
+    printf "    Created:          %s\n" "$date_str"
+    printf "    State:            %b\n" "$state"
+    printf "    Height (node-1):  %s\n" "$height"
+    printf "    Loki data:        %s\n" "$loki_sz"
+    printf "    VictoriaMetrics:  %s\n" "$vm_sz"
+}
+
+_infos_cluster_config() {
+    local run_dir="$1"
+    # Pull resolved commits from the run's .build-state if present.
+    local PREV_BUILD_DATE="" PREV_GNO_REPO="" PREV_GNO_VERSION="" PREV_GNO_COMMIT="" \
+          PREV_GNOLAND_IMAGE="" PREV_WATCHTOWER_REPO="" PREV_WATCHTOWER_VERSION="" \
+          PREV_WATCHTOWER_COMMIT="" PREV_WATCHTOWER_IMAGE="" PREV_SENTINEL_IMAGE="" \
+          PREV_CONTENT_HASH=""
+    local PREV_CONTENT_FILES=()
+    local prev_output
+    if prev_output=$(read_build_state_as_prev "${run_dir}/.build-state" 2>/dev/null); then
+        eval "$prev_output"
+    fi
+
+    local gno_commit_str wt_commit_str
+    gno_commit_str="${PREV_GNO_COMMIT:-<not yet built>}"
+    [[ -n "${PREV_GNO_COMMIT:-}" ]] && gno_commit_str="${PREV_GNO_COMMIT:0:12}"
+    wt_commit_str="${PREV_WATCHTOWER_COMMIT:-<not yet built>}"
+    [[ -n "${PREV_WATCHTOWER_COMMIT:-}" ]] && wt_commit_str="${PREV_WATCHTOWER_COMMIT:0:12}"
+
+    echo "==> Cluster config"
+    printf "    Nodes:       %s\n" "$NUM_NODES"
+    printf "    Topology:    %s\n" "$TOPOLOGY"
+    printf "    Gno:         %s@%s (%s)\n" "$GNO_REPO" "$GNO_VERSION" "$gno_commit_str"
+    printf "    Watchtower:  %s@%s (%s)\n" "$WATCHTOWER_REPO" "$WATCHTOWER_VERSION" "$wt_commit_str"
+}
+
+_infos_genesis() {
+    local run_dir="$1"
+    local genesis="${run_dir}/genesis.json"
+    echo "==> Genesis"
+    if [[ ! -f "$genesis" ]]; then
+        printf "    (missing)\n"
+        return
+    fi
+    local info chain_id genesis_time sha256 validators_count total_voting_power balances_count txs_count
+    info=$(parse_genesis "$genesis")
+    eval "$info"
+    printf "    sha256:      %s\n" "$sha256"
+    printf "    time:        %s\n" "$genesis_time"
+    printf "    validators:  %s\n" "$validators_count"
+    printf "    balances:    %s\n" "$balances_count"
+    printf "    txs:         %s\n" "$txs_count"
+}
+
+_infos_node_identities() {
+    local run_dir="$1"
+    local genesis="${run_dir}/genesis.json"
+    local valset_addrs=""
+    if [[ -f "$genesis" ]]; then
+        valset_addrs=$(parse_genesis_validators "$genesis" | cut -d'|' -f1)
+    fi
+
+    echo "==> Node identities"
+    printf "    %-8s  %-44s  %-96s  %s\n" "Moniker" "Address" "PubKey" "In valset"
+    printf "    %-8s  %-44s  %-96s  %s\n" "-------" "-------" "------" "---------"
+    local i in_valset
+    for i in $(seq 1 "$NUM_NODES"); do
+        get_node_info "$i"
+        if [[ -n "$valset_addrs" ]] && grep -qFx "$_addr" <<< "$valset_addrs"; then
+            in_valset="yes"
+        else
+            in_valset="no"
+        fi
+        printf "    %-8s  %-44s  %-96s  %s\n" \
+            "node-${i}" "$_addr" "$_pubkey" "$in_valset"
+    done
+}
+
+_infos_node_network() {
+    echo "==> Node network (host-accessible; localhost ports are Docker port-forwards)"
+    printf "    %-8s  %-70s  %s\n" "Moniker" "P2P" "RPC"
+    printf "    %-8s  %-70s  %s\n" "-------" "---" "---"
+    local i rpc_port p2p_port node_id
+    for i in $(seq 1 "$NUM_NODES"); do
+        rpc_port=$((GNOLAND_RPC_PORT_BASE + i - 1))
+        p2p_port=$((GNOLAND_P2P_PORT_BASE + i - 1))
+        node_id=$(cat "secrets/node-${i}/node_id" 2>/dev/null || echo "?")
+        printf "    %-8s  %-70s  http://localhost:%s\n" \
+            "node-${i}" "${node_id}@localhost:${p2p_port}" "$rpc_port"
+    done
+}
+
 cmd_infos() {
-    if [[ ! -d secrets ]]; then
-        echo "Error: secrets/ not found. Run 'make init' first."
+    local run_arg="${1:-}"
+    local run_dir
+
+    if [[ -n "$run_arg" ]]; then
+        run_dir="${PROJECT_ROOT}/runs/${run_arg}"
+        if [[ ! -d "$run_dir" ]]; then
+            echo "Error: runs/${run_arg} not found."
+            exit 1
+        fi
+    elif [[ -L "$CURRENT_LINK" ]]; then
+        run_dir=$(readlink "$CURRENT_LINK")
+    else
+        echo "Error: no current run. Run 'make create' first, or pass run=<folder>."
         exit 1
     fi
 
-    echo "==> Node information (${NUM_NODES} nodes, ${TOPOLOGY} topology):"
-    echo ""
-    printf "  %-12s %-44s %-96s %-26s %-8s %s\n" \
-        "Moniker" "Address" "PubKey" "RPC" "P2P" "Node ID"
-    printf "  %-12s %-44s %-96s %-26s %-8s %s\n" \
-        "-------" "-------" "------" "---" "---" "-------"
+    if [[ -f "${run_dir}/cluster.env" ]]; then
+        # shellcheck disable=SC1091
+        source "${run_dir}/cluster.env"
+    fi
 
-    for i in $(seq 1 "$NUM_NODES"); do
-        get_node_info "$i"
-        local rpc_port=$((GNOLAND_RPC_PORT_BASE + i - 1))
-        local p2p_port=$((GNOLAND_P2P_PORT_BASE + i - 1))
-        printf "  %-12s %-44s %-96s http://localhost:%-8s %-8s %s\n" \
-            "node-${i}" "$_addr" "$_pubkey" "$rpc_port" "$p2p_port" "$_node_id"
-    done
+    if [[ ! -d secrets ]]; then
+        echo "Error: secrets/ not found. Run 'make create' first."
+        exit 1
+    fi
+
+    _infos_header "$run_dir"
+    echo ""
+    _infos_cluster_config "$run_dir"
+    echo ""
+    _infos_genesis "$run_dir"
+    echo ""
+    _infos_node_identities "$run_dir"
+    echo ""
+    _infos_node_network
 }
 
 # ---- Update
 
+# Rebuilds a run's images (and restarts it) only when its pinned build state
+# drifts from the current env. If nothing has changed, it's a no-op. If a run
+# arg is given, targets that run (switching current to it, like cmd_start).
 cmd_update() {
-    local current
-    current=$(require_current_run)
-    echo "==> Restarting run: $(basename "$current")"
-    docker compose -f "${current}/docker-compose.yml" up -d --force-recreate
+    local run_arg="${1:-}"
+    local run_dir
+
+    if [[ -n "$run_arg" ]]; then
+        run_dir="${PROJECT_ROOT}/runs/${run_arg}"
+        if [[ ! -d "$run_dir" ]]; then
+            echo "Error: runs/${run_arg} not found."
+            exit 1
+        fi
+    else
+        run_dir=$(require_current_run)
+    fi
+
+    if [[ -f "${run_dir}/cluster.env" ]]; then
+        # shellcheck disable=SC1091
+        source "${run_dir}/cluster.env"
+    fi
+
+    local state_file="${run_dir}/.build-state"
+    local has_prev=0
+    if [[ -f "$state_file" ]]; then
+        local prev_output
+        prev_output=$(read_build_state_as_prev "$state_file")
+        eval "$prev_output"
+        has_prev=1
+    fi
+
+    resolve_commits
+
+    local drift_summary="" has_drift=1
+    if ((has_prev)); then
+        set +e
+        drift_summary=$(build_state_drift_summary)
+        has_drift=$?
+        set -e
+    fi
+
+    if ((has_drift == 0)); then
+        echo "==> Nothing to update (build state unchanged since ${PREV_BUILD_DATE})."
+        echo "    To force a rebuild, remove ${state_file} and run 'make update' again."
+        return
+    fi
+
+    if ((has_prev)); then
+        echo "==> Build state drifted since last build (${PREV_BUILD_DATE})."
+        echo ""
+        echo "$drift_summary"
+        echo ""
+    else
+        echo "==> No pinned build state for this run — rebuilding."
+        echo ""
+    fi
+
+    cmd_build
+    write_build_state "$state_file"
+
+    # Switch current to this run if needed (mirrors cmd_start's run= behavior).
+    if [[ -L "$CURRENT_LINK" ]]; then
+        local current
+        current=$(readlink "$CURRENT_LINK")
+        if [[ "$current" != "$run_dir" ]] && is_running "${current}/docker-compose.yml"; then
+            echo "==> Stopping current run $(basename "$current") first..."
+            docker compose -f "${current}/docker-compose.yml" down
+        fi
+    fi
+    ln -sfn "$run_dir" "$CURRENT_LINK"
+
+    check_network_capacity "$TOPOLOGY" "$NUM_NODES"
+    echo "==> Restarting run: $(basename "$run_dir")"
+    docker compose -f "${run_dir}/docker-compose.yml" up -d --force-recreate
     echo "==> Updated and restarted."
 }
 
 # ---- Clean
 
 cmd_clean_imgs() {
+    local yes="${1:-}"
+
     local images
     images=$(docker images --filter "reference=gno-cluster-*" -q 2>/dev/null | sort -u)
     if [[ -z "$images" ]]; then
@@ -724,6 +938,21 @@ cmd_clean_imgs() {
     fi
     local count
     count=$(echo "$images" | grep -c . || true)
+
+    if [[ -z "$yes" ]]; then
+        if [[ ! -t 0 ]]; then
+            echo "Error: clean-imgs requires yes=1 in non-interactive mode (${count} image(s) would be removed)." >&2
+            return 1
+        fi
+        echo "About to remove ${count} gno-cluster image(s)."
+        local ans
+        read -r -p "Proceed? [y/N] " ans
+        if [[ "$ans" != "y" && "$ans" != "Y" ]]; then
+            echo "Aborted."
+            return
+        fi
+    fi
+
     echo "==> Removing ${count} gno-cluster image(s)..."
     echo "$images" | xargs docker rmi -f >/dev/null
     echo "==> Done."
@@ -784,7 +1013,7 @@ cmd_clean_runs() {
 cmd_clean() {
     local yes="${1:-}"
     cmd_clean_runs "$yes"
-    cmd_clean_imgs
+    cmd_clean_imgs "$yes"
 }
 
 # ---- Dispatch
@@ -800,11 +1029,11 @@ case "$command" in
     clone)        cmd_clone "$@" ;;
     status)       cmd_status "$@" ;;
     logs)         cmd_logs "$@" ;;
-    infos)        cmd_infos ;;
+    infos)        cmd_infos "$@" ;;
     update)       cmd_update ;;
     clean)        cmd_clean "$@" ;;
     clean-runs)   cmd_clean_runs "$@" ;;
-    clean-imgs) cmd_clean_imgs ;;
+    clean-imgs) cmd_clean_imgs "$@" ;;
     *)
         echo "Unknown command: ${command}"
         echo "Run 'make help' for usage."
