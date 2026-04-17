@@ -36,13 +36,14 @@ GNOLAND_P2P_PORT_BASE ?= 26670
 GRAFANA_PORT          ?= 3000
 
 # ---- Env export (passed to cluster.sh)
-export PROJECT_ROOT  := $(shell pwd)
+export PROJECT_ROOT  := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 export GNO_VERSION GNO_REPO WATCHTOWER_VERSION WATCHTOWER_REPO
 export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GRAFANA_PORT
 
+# Cluster command are implemented in a bash script to allow for more complex logic
+# and better error handling. The Makefile is just a thin wrapper around it.
 CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 
-.DEFAULT_GOAL := help
 .PHONY: help build create start stop clone status logs infos update clean clean-runs clean-images
 
 help:
