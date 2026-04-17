@@ -10,6 +10,10 @@
 #       — outputs one line per validator: address|pubkey|power|name
 set -euo pipefail
 
+_PARSE_GENESIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=common.sh
+source "${_PARSE_GENESIS_DIR}/common.sh"
+
 parse_genesis() {
     local genesis="$1"
     if [[ ! -f "$genesis" ]]; then
@@ -20,7 +24,7 @@ parse_genesis() {
     local chain_id genesis_time sha256 vals bals txs power
     chain_id=$(jq -r '.chain_id // ""' "$genesis")
     genesis_time=$(jq -r '.genesis_time // ""' "$genesis")
-    sha256=$(shasum -a 256 "$genesis" | cut -c1-64)
+    sha256=$(sha256_file "$genesis")
     vals=$(jq '.validators | length' "$genesis")
     power=$(jq '[.validators[].power | (tonumber? // 0)] | add // 0' "$genesis")
     bals=$(jq '(.app_state.balances // []) | length' "$genesis")

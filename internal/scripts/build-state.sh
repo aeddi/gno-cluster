@@ -104,7 +104,7 @@ fetch_commit_titles() {
     local repo="$1" from_commit="$2" to_commit="$3"
     local api_url="https://api.github.com/repos/${repo}/compare/${from_commit}...${to_commit}"
     local json
-    json=$(curl -sf --max-time 5 "$api_url" 2>/dev/null) || return 1
+    json=$(http_get_silent "$api_url") || return 1
     local out
     out=$(echo "$json" | jq -r '.commits[]? | "  \(.sha[0:7])  \(.commit.message | split("\n")[0])"' 2>/dev/null) || return 1
     [[ -z "$out" ]] && return 1

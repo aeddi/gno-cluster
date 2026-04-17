@@ -19,20 +19,38 @@
 # and changes per invocation, which would defeat the idempotency check.
 set -euo pipefail
 
+_IMAGE_TAGS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=common.sh
+source "${_IMAGE_TAGS_DIR}/common.sh"
+
 compute_file_hashes_for() {
     # Enumerate regular files under the given paths in stable order and emit
     # per-file sha256 lines ("<hash>  <path>"). This is the raw input to both
     # compute_build_hash_for (for image tagging) and the .build-state snapshot
     # (for human-readable drift reporting).
+    #
+    # xargs can't invoke bash functions, so pick the external sha256 tool once
+    # and pass it directly. sha_cmd is deliberately unquoted in the xargs call
+    # so "shasum -a 256" splits into command + flag.
+    local sha_cmd
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha_cmd="sha256sum"
+    elif command -v shasum >/dev/null 2>&1; then
+        sha_cmd="shasum -a 256"
+    else
+        echo "Error: neither sha256sum nor shasum is installed." >&2
+        return 1
+    fi
+    # shellcheck disable=SC2086
     find "$@" -type f -print0 \
         | LC_ALL=C sort -z \
-        | xargs -0 shasum -a 256
+        | xargs -0 $sha_cmd
 }
 
 compute_build_hash_for() {
     # Short summary hash over the per-file hashes.
     compute_file_hashes_for "$@" \
-        | shasum -a 256 \
+        | sha256_stdin \
         | cut -c1-8
 }
 
