@@ -301,8 +301,16 @@ cmd_create() {
         interactive=0
     fi
 
-    cmd_build
-    echo ""
+    # cmd_create needs the gnoland image to generate keys and read back their
+    # metadata. Bootstrap only: if the image is missing, build once. If it
+    # exists, skip — rebuilding is make start's responsibility (using the run's
+    # pinned versions, which may differ from the project-root env).
+    if ! docker image inspect "$GNOLAND_IMAGE" >/dev/null 2>&1; then
+        echo "==> gnoland image not found, bootstrapping via build..."
+        cmd_build
+        echo ""
+    fi
+
     _ensure_node_secrets
     _print_node_info_table
 
@@ -371,7 +379,8 @@ cmd_start() {
             echo "Error: runs/${run_arg} not found."
             exit 1
         fi
-        # Align preflight with the run's actual topology/N
+        # Source the run's cluster.env so subsequent build/preflight use the
+        # run's pinned topology, node count, and image versions.
         if [[ -f "${run_dir}/cluster.env" ]]; then
             # shellcheck disable=SC1091
             source "${run_dir}/cluster.env"
@@ -384,6 +393,8 @@ cmd_start() {
                 docker compose -f "${current}/docker-compose.yml" down
             fi
         fi
+        cmd_build
+        echo ""
         check_network_capacity "$TOPOLOGY" "$NUM_NODES"
         echo "==> Resuming run: ${run_arg}"
         ln -sfn "$run_dir" "$CURRENT_LINK"
@@ -406,11 +417,14 @@ cmd_start() {
         echo "  Run 'make stop' first, or 'make start run=<folder>' to switch."
         return
     fi
-    # Align preflight with the run's actual topology/N
+    # Source the run's cluster.env so subsequent build/preflight use the
+    # run's pinned topology, node count, and image versions.
     if [[ -f "${current}/cluster.env" ]]; then
         # shellcheck disable=SC1091
         source "${current}/cluster.env"
     fi
+    cmd_build
+    echo ""
     check_network_capacity "$TOPOLOGY" "$NUM_NODES"
     echo "==> Starting run: $(basename "$current")"
     docker compose -f "${current}/docker-compose.yml" up -d
