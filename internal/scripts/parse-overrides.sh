@@ -10,6 +10,14 @@
 # Last-match wins for duplicate keys on the same node.
 set -euo pipefail
 
+# Pure-bash whitespace trim: no subprocess, no sed dialect concerns.
+_trim() {
+    local s="$1"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    echo "$s"
+}
+
 apply_config_overrides() {
     local node_name="$1" config_file="$2" callback="$3"
     local current_section=""
@@ -17,8 +25,7 @@ apply_config_overrides() {
     while IFS= read -r line; do
         # Strip inline comments (but not inside quotes — good enough for config keys)
         line="${line%%#*}"
-        # Trim leading/trailing whitespace
-        line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+        line=$(_trim "$line")
 
         [[ -z "$line" ]] && continue
 
@@ -31,8 +38,11 @@ apply_config_overrides() {
         # Key = value
         if [[ "$line" =~ ^([^=]+)=(.+)$ ]]; then
             local key value
-            key="$(echo "${BASH_REMATCH[1]}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-            value="$(echo "${BASH_REMATCH[2]}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/^"//;s/"$//')"
+            key=$(_trim "${BASH_REMATCH[1]}")
+            value=$(_trim "${BASH_REMATCH[2]}")
+            # Strip a single pair of surrounding quotes, if present.
+            value="${value#\"}"
+            value="${value%\"}"
 
             if [[ -z "$current_section" ]]; then
                 # Global section: applies to all nodes
@@ -41,7 +51,7 @@ apply_config_overrides() {
                 # Check if node_name is in the comma-separated section list
                 IFS=',' read -ra targets <<< "$current_section"
                 for target in "${targets[@]}"; do
-                    target="$(echo "$target" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+                    target=$(_trim "$target")
                     if [[ "$target" == "$node_name" ]]; then
                         "$callback" "$key" "$value"
                         break
