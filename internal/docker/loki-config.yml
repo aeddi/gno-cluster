@@ -39,7 +39,7 @@ compactor:
 
 limits_config:
     retention_period: 720h
-    allow_structured_metadata: false
+    allow_structured_metadata: true
 
 chunk_store_config:
     chunk_cache_config:
