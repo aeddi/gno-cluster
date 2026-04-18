@@ -50,12 +50,12 @@ _gno_cluster_make() {
                         runs+=("$(basename "$entry")")
                     done
                 fi
+                # Return bare folder names. Readline's own word-break characters
+                # always include `=`, so bash replaces only the text after the
+                # last `=` in the line regardless of COMP_WORDBREAKS. Prepending
+                # "run=" here would double up to "run=run=..." when `=` is not
+                # in COMP_WORDBREAKS (the match=2 branch).
                 COMPREPLY=($(compgen -W "${runs[*]}" -- "$partial"))
-                # In case (b) we ate the "run=" prefix; put it back so the
-                # shell replaces the whole word correctly.
-                if (( match == 2 )); then
-                    COMPREPLY=("${COMPREPLY[@]/#/run=}")
-                fi
                 return 0
             fi
         fi
