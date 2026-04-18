@@ -12,6 +12,20 @@ Every `make create` produces a self-contained **run folder** under `runs/` (time
 - `curl` or `wget` (for `make status` and optional GitHub compare on drift)
 - `sha256sum` (Linux) or `shasum` (macOS) — either works
 
+## Shell completion (optional)
+
+Tab-completion for `make <cmd> run=<folder>` values. Source the file for your shell — nothing is installed outside the project directory.
+
+```bash
+# bash
+source completions/gno-cluster.bash
+
+# zsh
+source completions/gno-cluster.zsh
+```
+
+Either command activates completion for the current shell only. Add the same line to `~/.bashrc` / `~/.zshrc` if you want it persistent. Completion activates only when the working directory is inside a gno-cluster checkout (detected via `internal/scripts/cluster.sh`); elsewhere `make` keeps its normal behavior.
+
 ## Quick Start
 
 Bring up a fresh 4-node mesh cluster and verify it's producing blocks.
