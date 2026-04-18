@@ -47,7 +47,7 @@ export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GRAFANA_PO
 # and better error handling. The Makefile is just a thin wrapper around it.
 CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 
-.PHONY: help build create start stop restart clone status logs infos update clean clean-runs clean-imgs
+.PHONY: help build test create start stop restart clone status logs infos update clean clean-runs clean-imgs
 
 help:
 	@awk '/^# Usage:/,/^$$/{sub(/^# ?/,""); print}' $(MAKEFILE_LIST)
@@ -88,7 +88,12 @@ clean-runs:
 clean:
 	@$(CLUSTER) clean $(yes)
 
-# build is an implementation detail of create/update. Kept here so it can still
-# be invoked directly (e.g. for debugging), but hidden from `make help`.
+# Targets below are for CI and debugging — not part of the normal workflow,
+# intentionally omitted from `make help`. Invoke directly when you need to
+# force a rebuild or run the test suite.
+
 build:
 	@$(CLUSTER) build $(force)
+
+test:
+	@for f in $(PROJECT_ROOT)/tests/test_*.sh; do bash "$$f" || exit 1; done
