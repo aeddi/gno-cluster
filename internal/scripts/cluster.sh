@@ -510,6 +510,18 @@ cmd_create() {
     fi
 }
 
+# Prints a short hint block with next-step commands after a successful start.
+# Uses $GRAFANA_PORT from the active run's cluster.env (already sourced by caller).
+_print_next_steps() {
+    echo ""
+    echo "    Next steps:"
+    echo "      make status                  # block height, peer count, reachability"
+    echo "      make infos                   # full report (config, genesis, endpoints)"
+    echo "      make logs svc=<service>      # tail a service (e.g. node-1, watchtower)"
+    echo "      open http://localhost:${GRAFANA_PORT}   # Grafana dashboards"
+    echo "      make stop                    # shut down (data preserved)"
+}
+
 # ---- Start
 
 cmd_start() {
@@ -537,6 +549,7 @@ cmd_start() {
         ln -sfn "$run_dir" "$CURRENT_LINK"
         docker compose -f "${CURRENT_LINK}/docker-compose.yml" up -d
         echo "==> Run resumed."
+        _print_next_steps
         return
     fi
 
@@ -558,6 +571,7 @@ cmd_start() {
     echo "==> Starting run: $(basename "$current")"
     docker compose -f "${current}/docker-compose.yml" up -d
     echo "==> Run started."
+    _print_next_steps
 }
 
 # ---- Stop
@@ -1069,6 +1083,7 @@ cmd_update() {
     echo "==> Restarting run: $(basename "$run_dir")"
     docker compose -f "${run_dir}/docker-compose.yml" up -d --force-recreate
     echo "==> Updated and restarted."
+    _print_next_steps
 }
 
 # ---- Clean
