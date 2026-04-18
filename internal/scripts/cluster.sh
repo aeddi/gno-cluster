@@ -345,6 +345,22 @@ _print_node_info_table() {
   done
 }
 
+# Prints a suggested initial validator set in bash-array form, one entry per
+# node as "<moniker> <power> <pubkey>". Printed when genesis.json is missing
+# so the user can drop these straight into their genesis builder.
+_print_initial_valset() {
+  echo ""
+  echo "Suggested initial validator set (copy into your genesis builder):"
+  echo ""
+  echo "INITIAL_VALSET=("
+  local i
+  for i in $(seq 1 "$NUM_NODES"); do
+    get_node_info "$i"
+    printf '  "node-%s 1 %s"\n' "$i" "$_pubkey"
+  done
+  echo ")"
+}
+
 # Prints the genesis summary: chain_id, time, sha256, balances/txs counts,
 # and a validator-set breakdown (which validators belong to this cluster).
 _print_genesis_info() {
@@ -449,8 +465,10 @@ cmd_create() {
         echo "Error: genesis.json not found at ${genesis}." >&2
         echo "  Non-interactive mode requires a pre-existing genesis.json." >&2
         echo "  Provide it or re-run from a TTY without yes=1 to be prompted." >&2
+        _print_initial_valset
         exit 1
       fi
+      _print_initial_valset
       echo ""
       echo "No genesis.json found. Copy your genesis.json to ${genesis}, then press Enter."
       read -r _
