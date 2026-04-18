@@ -3,16 +3,14 @@
 #
 # Source this file in your current shell:
 #     source /path/to/gno-cluster/completions/gno-cluster.zsh
-# No ~/.zshrc modification required (but you can add that source line there
-# if you want it persistent across sessions).
+# Nothing is installed outside the project directory.
 #
-# The completion only activates when the current working directory is inside a
-# gno-cluster project (detected by walking up for internal/scripts/cluster.sh).
-# Outside that, it delegates to the default _make, so make keeps working
-# normally in every other project.
+# Only activates when PWD is inside a gno-cluster checkout (detected by
+# walking up for internal/scripts/cluster.sh). Outside that, it delegates to
+# the default _make so regular make completion is unaffected.
 
 _gno_cluster_make() {
-    local root
+    local root cur
 
     # Walk up from PWD looking for a cluster.sh marker.
     root="$PWD"
@@ -21,26 +19,42 @@ _gno_cluster_make() {
     done
 
     if [[ -f "$root/internal/scripts/cluster.sh" ]]; then
-        # Are we completing a value right after `run=`? With zsh's default
-        # splitting, `run=foo` becomes words "run", "=", "foo".
-        if (( CURRENT >= 3 )) \
+        # zsh by default keeps `run=foo` as one word. Handle both styles in case
+        # the user has customized wordchars/wordbreaks.
+        local partial="" match=0
+        cur="${words[CURRENT]}"
+        if [[ "$cur" == run=* ]]; then
+            partial="${cur#run=}"
+            match=2
+        elif (( CURRENT >= 3 )) \
                 && [[ "${words[CURRENT-1]}" == "=" ]] \
                 && [[ "${words[CURRENT-2]}" == "run" ]]; then
-            # Only for run-aware commands.
-            local w found=0
+            partial="$cur"
+            match=1
+        fi
+
+        if (( match )); then
+            local w cmd_found=0
             for w in "${words[@]:2}"; do
                 case "$w" in
-                    start|update|clone|infos|restart) found=1; break ;;
+                    start|update|clone|infos|restart) cmd_found=1; break ;;
                 esac
             done
-            if (( found )); then
+            if (( cmd_found )); then
                 local -a runs
                 local entry
-                for entry in "$root/runs"/*(N); do
-                    [[ -d "$entry" && ! -L "$entry" ]] && runs+=("${entry:t}")
-                done
+                if [[ -d "$root/runs" ]]; then
+                    for entry in "$root/runs"/*(N); do
+                        [[ -d "$entry" && ! -L "$entry" ]] && runs+=("${entry:t}")
+                    done
+                fi
                 if (( ${#runs[@]} > 0 )); then
-                    _values 'run folder' "${runs[@]}"
+                    if (( match == 2 )); then
+                        # Prepend run= so the replacement covers the full word.
+                        compadd -- "${runs[@]/#/run=}"
+                    else
+                        compadd -- "${runs[@]}"
+                    fi
                     return 0
                 fi
             fi
@@ -51,4 +65,9 @@ _gno_cluster_make() {
     _make "$@"
 }
 
+if ! whence -w compdef >/dev/null 2>&1; then
+    echo "gno-cluster completion: zsh's compdef is unavailable." >&2
+    echo "  Run this once before sourcing:  autoload -Uz compinit && compinit" >&2
+    return 1
+fi
 compdef _gno_cluster_make make
