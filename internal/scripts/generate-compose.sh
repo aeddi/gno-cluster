@@ -33,14 +33,14 @@ NODE_IDS=()
 for i in $(seq 1 "$NUM_NODES"); do
     NODE_KEY_FILE="${RUN_DIR}/gnoland-data-${i}/secrets/node_key.json"
     if [[ ! -f "$NODE_KEY_FILE" ]]; then
-        echo "Error: ${NODE_KEY_FILE} not found. Run 'make init' first." >&2
+        echo "Error: ${NODE_KEY_FILE} not found. Run 'make create' first." >&2
         exit 1
     fi
     NODE_ID_FILE="${SECRETS_DIR}/node-${i}/node_id"
     if [[ -f "$NODE_ID_FILE" ]]; then
         NODE_IDS[$i]=$(cat "$NODE_ID_FILE")
     else
-        echo "Error: ${NODE_ID_FILE} not found. Run 'make init' first." >&2
+        echo "Error: ${NODE_ID_FILE} not found. Run 'make create' first." >&2
         exit 1
     fi
 done
