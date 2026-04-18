@@ -56,11 +56,6 @@ http_get() {
   fi
 }
 
-# Generates 32 bytes of random hex. Uses /dev/urandom (POSIX).
-rand_hex() {
-  od -An -tx1 -N32 /dev/urandom | tr -d ' \n'
-}
-
 # Silent resolution: echoes the current run dir on success, returns non-zero
 # when runs/current is missing or dangling. Use this when the caller has a
 # fallback behavior (e.g. skip a conditional stop-if-running step).

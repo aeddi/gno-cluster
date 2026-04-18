@@ -1,7 +1,6 @@
 runs/
 internal/secrets/
 internal/tests/
-docs/
 .git/
 genesis.json
 config.overrides
