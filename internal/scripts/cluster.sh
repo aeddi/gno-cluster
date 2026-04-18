@@ -2,8 +2,8 @@
 # internal/scripts/cluster.sh — Main entry point for gno-cluster operations.
 #
 # Usage: cluster.sh <command> [args]
-# Commands: build, create, start, stop, restart, clone, status, logs, infos,
-#           update, clean, clean-runs, clean-imgs
+# Commands: build, create, list, start, stop, restart, clone, status, logs,
+#           infos, update, clean, clean-runs, clean-imgs
 #
 # Expects environment variables (set by Makefile or cluster.env):
 #   PROJECT_ROOT, GNO_VERSION, GNO_REPO, WATCHTOWER_VERSION, WATCHTOWER_REPO,
@@ -723,6 +723,23 @@ _last_block_height() {
     jq -r '.height // "-"' "$f" 2>/dev/null || echo "-"
 }
 
+# Total size of all per-node gnoland data directories under a run, or "-" when
+# the run has no data dirs yet.
+_gnoland_data_size() {
+    local run_dir="$1"
+    local dirs=("${run_dir}"/gnoland-data-*)
+    [[ -d "${dirs[0]}" ]] || { echo "-"; return; }
+    du -sch "${dirs[@]}" 2>/dev/null | tail -1 | awk '{print $1}'
+}
+
+# Reads a single KEY from a run's cluster.env without sourcing the whole file
+# (so we don't clobber the caller's env). Prints "-" if the key isn't set.
+_run_env_get() {
+    local run_dir="$1" key="$2" value
+    value=$(grep -E "^${key}=" "${run_dir}/cluster.env" 2>/dev/null | head -1 | cut -d= -f2-)
+    echo "${value:--}"
+}
+
 _infos_header() {
     local run_dir="$1"
     local name date_str state height loki_sz vm_sz
@@ -824,6 +841,65 @@ _infos_node_network() {
         node_id=$(cat "secrets/node-${i}/node_id" 2>/dev/null || echo "?")
         printf "    %-8s  %-70s  http://localhost:%s\n" \
             "node-${i}" "${node_id}@localhost:${p2p_port}" "$rpc_port"
+    done
+}
+
+cmd_list() {
+    if [[ ! -d runs ]]; then
+        echo "No runs yet. Run 'make create' to create one."
+        return
+    fi
+
+    # Collect run folders, excluding the 'current' symlink.
+    local runs=() entry
+    for entry in runs/*; do
+        [[ -d "$entry" && ! -L "$entry" ]] && runs+=("$entry")
+    done
+    if ((${#runs[@]} == 0)); then
+        echo "No runs yet. Run 'make create' to create one."
+        return
+    fi
+
+    # Newest first: folder names start with an ISO timestamp.
+    IFS=$'\n' read -r -d '' -a runs < <(printf '%s\n' "${runs[@]}" | sort -r && printf '\0')
+
+    local current_name="" current_dir=""
+    if current_dir=$(resolve_current_run 2>/dev/null); then
+        current_name=$(basename "$current_dir")
+    fi
+
+    echo "==> Runs (${#runs[@]} total)"
+    echo ""
+
+    local run name state_label marker nodes topology height gno_sz loki_sz vm_sz total_sz
+    for run in "${runs[@]}"; do
+        name=$(basename "$run")
+        if is_running "${run}/docker-compose.yml"; then
+            state_label=$(_color 32 "running")
+        else
+            state_label=$(_color 31 "stopped")
+        fi
+        if [[ "$name" == "$current_name" ]]; then
+            marker=" $(_color 33 "(current)")"
+        else
+            marker=""
+        fi
+        nodes=$(_run_env_get "$run" NUM_NODES)
+        topology=$(_run_env_get "$run" TOPOLOGY)
+        height=$(_last_block_height "${run}/gnoland-data-1/secrets/priv_validator_state.json")
+        gno_sz=$(_gnoland_data_size "$run")
+        loki_sz=$(_dir_size "${run}/loki-data")
+        vm_sz=$(_dir_size "${run}/victoria-data")
+        total_sz=$(du -sh "$run" 2>/dev/null | awk '{print $1}')
+        total_sz="${total_sz:--}"
+
+        printf "%s%b\n" "$name" "$marker"
+        printf "    State:    %b\n" "$state_label"
+        printf "    Config:   %s nodes, %s topology\n" "$nodes" "$topology"
+        printf "    Height:   %s  (node-1)\n" "$height"
+        printf "    Sizes:    gnoland %s, loki %s, victoria %s  (run total %s)\n" \
+            "$gno_sz" "$loki_sz" "$vm_sz" "$total_sz"
+        echo ""
     done
 }
 
@@ -1030,7 +1106,7 @@ cmd_clean() {
 
 # ---- Dispatch
 
-command="${1:?Usage: cluster.sh <command> (build|create|start|stop|restart|clone|status|logs|infos|update|clean|clean-runs|clean-imgs)}"
+command="${1:?Usage: cluster.sh <command> (build|create|list|start|stop|restart|clone|status|logs|infos|update|clean|clean-runs|clean-imgs)}"
 shift || true
 
 case "$command" in
@@ -1043,6 +1119,7 @@ case "$command" in
     status)       cmd_status "$@" ;;
     logs)         cmd_logs "$@" ;;
     infos)        cmd_infos "$@" ;;
+    list)         cmd_list ;;
     update)       cmd_update ;;
     clean)        cmd_clean "$@" ;;
     clean-runs)   cmd_clean_runs "$@" ;;

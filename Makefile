@@ -8,6 +8,7 @@
 #   update       [run=<folder>]   Rebuild drifted images and restart (run= targets a past run, else current)
 #
 # Cluster ops:
+#   list                          List all runs with state, config, height, and on-disk sizes
 #   start        [run=<folder>]   Start a run (run= switches to a past run, else current)
 #   stop                          Stop the current run
 #   restart      [run=<folder>]   Stop then start (run= switches to a past run, else current)
@@ -47,13 +48,16 @@ export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GRAFANA_PO
 # and better error handling. The Makefile is just a thin wrapper around it.
 CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 
-.PHONY: help build test create start stop restart clone status logs infos update clean clean-runs clean-imgs
+.PHONY: help build test create list start stop restart clone status logs infos update clean clean-runs clean-imgs
 
 help:
 	@awk '/^# Usage:/,/^$$/{sub(/^# ?/,""); print}' $(MAKEFILE_LIST)
 
 create:
 	@$(CLUSTER) create $(yes)
+
+list:
+	@$(CLUSTER) list
 
 start:
 	@$(CLUSTER) start $(run)
