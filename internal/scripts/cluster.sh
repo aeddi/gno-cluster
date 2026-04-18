@@ -64,7 +64,44 @@ resolve_current_run() {
     local d
     d=$(readlink "$CURRENT_LINK")
     [[ -d "$d" ]] || return 1
-    echo "$d"
+    # Canonicalize to match resolve_run_arg's output so string comparisons work.
+    ( cd "$d" && pwd -P )
+}
+
+# Resolves a `run=<value>` argument to an absolute, canonicalized run-folder
+# path. Accepts four forms:
+#   - bare run name:          2026-04-17_..._78-txs          → $PROJECT_ROOT/runs/<name>
+#   - relative path with /:   runs/2026-...   ./runs/2026-.  → resolved from $PROJECT_ROOT
+#   - absolute path:          /abs/path/runs/2026-...        → used as-is
+#   - with make -C / -f:      same rules — paths without `/` and relative paths
+#                             are resolved from $PROJECT_ROOT (the Makefile's own
+#                             location), so invocation directory doesn't matter.
+# Prints the canonical path on success; prints a clear error and returns 1
+# otherwise. Callers collect via:  run_dir=$(resolve_run_arg "$arg") || exit 1
+resolve_run_arg() {
+    local input="$1"
+    local candidate
+
+    if [[ "$input" == /* ]]; then
+        # Absolute path — trust it as given.
+        candidate="$input"
+    elif [[ "$input" == */* ]]; then
+        # Relative path (possibly starting with ./ or ../), resolved from the
+        # project root so it behaves the same regardless of CWD or make -C.
+        candidate="${PROJECT_ROOT}/${input}"
+    else
+        # Bare name: look up under PROJECT_ROOT/runs/.
+        candidate="${PROJECT_ROOT}/runs/${input}"
+    fi
+
+    if [[ ! -d "$candidate" ]]; then
+        echo "Error: run not found: '${input}'" >&2
+        echo "  Tried: ${candidate}" >&2
+        return 1
+    fi
+    # Canonicalize so later comparisons against runs/current (also canonical)
+    # don't get tripped up by ../, ./, or trailing slashes.
+    ( cd "$candidate" && pwd -P )
 }
 
 # Strict resolution: prints an actionable error on failure and returns non-zero.
@@ -473,13 +510,10 @@ cmd_create() {
 cmd_start() {
     local run_arg="${1:-}"
 
-    # Resume a specific run by name
+    # Resume a specific run by name, relative path, or absolute path.
     if [[ -n "$run_arg" ]]; then
-        local run_dir="${PROJECT_ROOT}/runs/${run_arg}"
-        if [[ ! -d "$run_dir" ]]; then
-            echo "Error: runs/${run_arg} not found."
-            exit 1
-        fi
+        local run_dir
+        run_dir=$(resolve_run_arg "$run_arg") || exit 1
         # Source the run's cluster.env so downstream steps use the run's own
         # topology, node count, and image versions (not the project-root ones).
         if [[ -f "${run_dir}/cluster.env" ]]; then
@@ -494,7 +528,7 @@ cmd_start() {
         resolve_commits
         ensure_images_for_run "$run_dir"
         check_network_capacity "$TOPOLOGY" "$NUM_NODES"
-        echo "==> Resuming run: ${run_arg}"
+        echo "==> Resuming run: $(basename "$run_dir")"
         ln -sfn "$run_dir" "$CURRENT_LINK"
         docker compose -f "${CURRENT_LINK}/docker-compose.yml" up -d
         echo "==> Run resumed."
@@ -553,11 +587,7 @@ cmd_clone() {
     local source_dir
 
     if [[ -n "$run_arg" ]]; then
-        source_dir="${PROJECT_ROOT}/runs/${run_arg}"
-        if [[ ! -d "$source_dir" ]]; then
-            echo "Error: runs/${run_arg} not found." >&2
-            exit 1
-        fi
+        source_dir=$(resolve_run_arg "$run_arg") || exit 1
     else
         source_dir=$(require_current_run) || exit 1
     fi
@@ -936,11 +966,7 @@ cmd_infos() {
     local run_dir
 
     if [[ -n "$run_arg" ]]; then
-        run_dir="${PROJECT_ROOT}/runs/${run_arg}"
-        if [[ ! -d "$run_dir" ]]; then
-            echo "Error: runs/${run_arg} not found."
-            exit 1
-        fi
+        run_dir=$(resolve_run_arg "$run_arg") || exit 1
     else
         run_dir=$(require_current_run) || exit 1
     fi
@@ -976,13 +1002,9 @@ cmd_update() {
     local run_dir
 
     if [[ -n "$run_arg" ]]; then
-        run_dir="${PROJECT_ROOT}/runs/${run_arg}"
-        if [[ ! -d "$run_dir" ]]; then
-            echo "Error: runs/${run_arg} not found."
-            exit 1
-        fi
+        run_dir=$(resolve_run_arg "$run_arg") || exit 1
     else
-        run_dir=$(require_current_run)
+        run_dir=$(require_current_run) || exit 1
     fi
 
     if [[ -f "${run_dir}/cluster.env" ]]; then
