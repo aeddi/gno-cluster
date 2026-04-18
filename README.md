@@ -12,23 +12,6 @@ Every `make create` produces a self-contained **run folder** under `runs/` (time
 - `curl` or `wget` (for `make status` and optional GitHub compare on drift)
 - `sha256sum` (Linux) or `shasum` (macOS) — either works
 
-## Shell completion (optional)
-
-Tab-completion for `make <cmd> run=<folder>` values. Three setup levels, pick one:
-
-**Per-session** — no persistent change, source the right file each time:
-
-```bash
-source completions/gno-cluster.bash      # bash
-source completions/gno-cluster.zsh       # zsh
-```
-
-**Persistent across shell sessions** — add the same line to `~/.bashrc` / `~/.zshrc` once.
-
-**Automatic per-directory with [direnv](https://direnv.net)** — the repo ships a `.envrc` that exports `GNO_CLUSTER_ROOT` when you `cd` in. Add the rc snippet shown at the top of `.envrc` to your `~/.bashrc` / `~/.zshrc` once, then `direnv allow` in the project. After that, completion activates automatically when you enter the directory and deactivates when you leave. Caveat: direnv can't propagate shell functions by itself, so the one-time rc snippet is still required (it's what actually sources the completion on directory change).
-
-Completion activates only when the working directory is inside a gno-cluster checkout (detected via `internal/scripts/cluster.sh`); elsewhere `make` keeps its normal behavior.
-
 ## Quick Start
 
 Bring up a fresh 4-node mesh cluster and verify it's producing blocks.
