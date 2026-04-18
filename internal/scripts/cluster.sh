@@ -135,7 +135,7 @@ is_running() {
 _max_width() {
   local maxw=0 s
   for s in "$@"; do
-    ((${#s} > maxw)) && maxw=${#s}
+    if ((${#s} > maxw)); then maxw=${#s}; fi
   done
   echo "$maxw"
 }

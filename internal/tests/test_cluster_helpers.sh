@@ -110,6 +110,24 @@ set -e
 assert_eq "missing run returns 1" "1" "$code"
 assert_contains "missing run error mentions name" "nonexistent-run" "$err"
 
+# ---- _max_width
+echo "-- _max_width --"
+
+result=$(_max_width "hello" "hi" "world")
+assert_eq "max of three strings" "5" "$result"
+
+# Last element is the longest — the for loop's final iteration must update max.
+result=$(_max_width "a" "bb" "ccc")
+assert_eq "last element longest" "3" "$result"
+
+# Last element is the shortest — ensures the false branch doesn't abort under set -e.
+result=$(_max_width "ccc" "bb" "a")
+assert_eq "last element shortest does not abort" "3" "$result"
+
+# Single element.
+result=$(_max_width "moniker")
+assert_eq "single element" "7" "$result"
+
 # ---- _last_block_height
 echo "-- _last_block_height --"
 
