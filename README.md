@@ -14,17 +14,20 @@ Every `make create` produces a self-contained **run folder** under `runs/` (time
 
 ## Shell completion (optional)
 
-Tab-completion for `make <cmd> run=<folder>` values. Source the file for your shell — nothing is installed outside the project directory.
+Tab-completion for `make <cmd> run=<folder>` values. Three setup levels, pick one:
+
+**Per-session** — no persistent change, source the right file each time:
 
 ```bash
-# bash
-source completions/gno-cluster.bash
-
-# zsh
-source completions/gno-cluster.zsh
+source completions/gno-cluster.bash      # bash
+source completions/gno-cluster.zsh       # zsh
 ```
 
-Either command activates completion for the current shell only. Add the same line to `~/.bashrc` / `~/.zshrc` if you want it persistent. Completion activates only when the working directory is inside a gno-cluster checkout (detected via `internal/scripts/cluster.sh`); elsewhere `make` keeps its normal behavior.
+**Persistent across shell sessions** — add the same line to `~/.bashrc` / `~/.zshrc` once.
+
+**Automatic per-directory with [direnv](https://direnv.net)** — the repo ships a `.envrc` that exports `GNO_CLUSTER_ROOT` when you `cd` in. Add the rc snippet shown at the top of `.envrc` to your `~/.bashrc` / `~/.zshrc` once, then `direnv allow` in the project. After that, completion activates automatically when you enter the directory and deactivates when you leave. Caveat: direnv can't propagate shell functions by itself, so the one-time rc snippet is still required (it's what actually sources the completion on directory change).
+
+Completion activates only when the working directory is inside a gno-cluster checkout (detected via `internal/scripts/cluster.sh`); elsewhere `make` keeps its normal behavior.
 
 ## Quick Start
 
