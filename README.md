@@ -164,6 +164,8 @@ Copy `cluster.env.example` to `cluster.env`. All settings have sensible defaults
 | `GNOLAND_RPC_PORT_BASE` | `26657`                | Host RPC port for node-1 (increments per node)                                           |
 | `GNOLAND_P2P_PORT_BASE` | `26670`                | Host P2P port for node-1 (increments per node)                                           |
 | `GRAFANA_PORT`          | `3000`                 | Host port for the Grafana UI                                                             |
+| `VICTORIA_METRICS_PORT` | `8428`                 | Host port for VictoriaMetrics HTTP API (bound to `127.0.0.1`)                            |
+| `LOKI_PORT`             | `3100`                 | Host port for Loki HTTP API (bound to `127.0.0.1`)                                       |
 
 At `make create` time, `cluster.env` is copied into the run folder and becomes the run's own pinned config. Editing the project-root `cluster.env` later affects future `make create` invocations, not existing runs — use `make update` to apply version bumps to an existing run.
 
@@ -226,6 +228,7 @@ runs/2026-04-16_12-53-57_gnolang-gno_master_4-nodes_4-vals_9-bals_78-txs/
 ├── docker-compose.yml       # Generated
 ├── watchtower.toml          # Generated
 ├── sentinel-N-config.toml   # Generated, one per node
+├── loki-config.yml          # Loki server config
 ├── grafana-provisioning/    # Generated monitoring config
 ├── gnoland-data-N/          # Per-node data (chain, WAL, secrets copy)
 ├── loki-data/               # Logs collected by Loki
