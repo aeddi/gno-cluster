@@ -33,9 +33,12 @@ echo "==> Parsing genesis.json..."
 eval "$(parse_genesis "${PROJECT_ROOT}/genesis.json")"
 
 # ---- Build folder name
+# Slugify repo and version: '/' in refs like "feature/foo" would create nested
+# paths under runs/, breaking `make list` and `runs/current` semantics.
 REPO_SLUG=$(echo "$GNO_REPO" | tr '/' '-')
+VERSION_SLUG=$(echo "$GNO_VERSION" | tr '/' '-')
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
-RUN_NAME="${TIMESTAMP}_${REPO_SLUG}_${GNO_VERSION}_${NUM_NODES}-nodes_${validators_count}-vals_${balances_count}-bals_${txs_count}-txs"
+RUN_NAME="${TIMESTAMP}_${REPO_SLUG}_${VERSION_SLUG}_${NUM_NODES}-nodes_${validators_count}-vals_${balances_count}-bals_${txs_count}-txs"
 RUN_DIR="${PROJECT_ROOT}/runs/${RUN_NAME}"
 
 echo "==> Creating run: ${RUN_NAME}"

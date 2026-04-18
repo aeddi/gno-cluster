@@ -683,20 +683,20 @@ _clone_resolve_source() {
 # source's cluster.env + genesis. Echoes the full path, creates the directory.
 _clone_new_dir() {
   local source_dir="$1"
-  local repo_slug version nodes timestamp new_name new_dir validators_count balances_count txs_count
+  local repo_slug version_slug nodes timestamp new_name new_dir validators_count balances_count txs_count
   eval "$(
     source "${SCRIPT_DIR}/parse-genesis.sh"
     . "${source_dir}/cluster.env" 2>/dev/null || true
     eval "$(parse_genesis "${source_dir}/genesis.json")"
     echo "repo_slug=$(echo "${GNO_REPO}" | tr '/' '-')"
-    echo "version=${GNO_VERSION}"
+    echo "version_slug=$(echo "${GNO_VERSION}" | tr '/' '-')"
     echo "nodes=${NUM_NODES}"
     echo "validators_count=${validators_count}"
     echo "balances_count=${balances_count}"
     echo "txs_count=${txs_count}"
   )"
   timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
-  new_name="${timestamp}_${repo_slug}_${version}_${nodes}-nodes_${validators_count}-vals_${balances_count}-bals_${txs_count}-txs"
+  new_name="${timestamp}_${repo_slug}_${version_slug}_${nodes}-nodes_${validators_count}-vals_${balances_count}-bals_${txs_count}-txs"
   new_dir="${PROJECT_ROOT}/runs/${new_name}"
   mkdir -p "$new_dir"
   echo "$new_dir"
