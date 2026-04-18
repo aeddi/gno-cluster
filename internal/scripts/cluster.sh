@@ -322,12 +322,15 @@ ensure_images_for_run() {
     echo ""
   fi
 
-  if ! docker image inspect "$PREV_GNOLAND_IMAGE" >/dev/null 2>&1; then
-    echo "Error: pinned image ${PREV_GNOLAND_IMAGE} is not present."
-    echo "  It may have been removed via 'make clean-imgs' or 'docker image prune'."
-    echo "  Run 'make update' to rebuild this run's images."
-    exit 1
-  fi
+  local img
+  for img in "$PREV_GNOLAND_IMAGE" "$PREV_WATCHTOWER_IMAGE" "$PREV_SENTINEL_IMAGE"; do
+    if ! docker image inspect "$img" >/dev/null 2>&1; then
+      echo "Error: pinned image ${img} is not present."
+      echo "  It may have been removed via 'make clean-imgs' or 'docker image prune'."
+      echo "  Run 'make update' to rebuild this run's images."
+      exit 1
+    fi
+  done
   docker tag "$PREV_GNOLAND_IMAGE" gno-cluster-gnoland:latest
   docker tag "$PREV_WATCHTOWER_IMAGE" gno-cluster-watchtower:latest
   docker tag "$PREV_SENTINEL_IMAGE" gno-cluster-sentinel:latest
