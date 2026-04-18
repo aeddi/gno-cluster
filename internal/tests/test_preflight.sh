@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# tests/test_preflight.sh
+# internal/tests/test_preflight.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/helpers.sh"
 
-source "$SCRIPT_DIR/../internal/scripts/preflight.sh"
+source "$SCRIPT_DIR/../scripts/preflight.sh"
 
 echo "=== preflight.sh ==="
 

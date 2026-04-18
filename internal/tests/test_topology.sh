@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# tests/test_topology.sh
+# internal/tests/test_topology.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/helpers.sh"
 
-source "$SCRIPT_DIR/../internal/scripts/topology.sh"
+source "$SCRIPT_DIR/../scripts/topology.sh"
 
 echo "=== topology.sh ==="
 

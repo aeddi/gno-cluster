@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# tests/test_parse_genesis.sh
+# internal/tests/test_parse_genesis.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/helpers.sh"
 
-source "$SCRIPT_DIR/../internal/scripts/parse-genesis.sh"
+source "$SCRIPT_DIR/../scripts/parse-genesis.sh"
 
 echo "=== parse-genesis.sh ==="
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# tests/test_image_tags.sh
+# internal/tests/test_image_tags.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/helpers.sh"
 
-source "$SCRIPT_DIR/../internal/scripts/image-tags.sh"
+source "$SCRIPT_DIR/../scripts/image-tags.sh"
 
 echo "=== image-tags.sh ==="
 

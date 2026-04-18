@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/test_build_state.sh
+# internal/tests/test_build_state.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -14,7 +14,7 @@ echo "#!/bin/sh" > "$PROJECT_ROOT/internal/docker/gnoland-entrypoint.sh"
 echo "#!/bin/sh" > "$PROJECT_ROOT/internal/scripts/parse-overrides.sh"
 export PROJECT_ROOT
 
-source "$SCRIPT_DIR/../internal/scripts/build-state.sh"
+source "$SCRIPT_DIR/../scripts/build-state.sh"
 
 echo "=== build-state.sh ==="
 

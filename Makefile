@@ -100,4 +100,4 @@ build:
 	@$(CLUSTER) build $(force)
 
 test:
-	@for f in $(PROJECT_ROOT)/tests/test_*.sh; do bash "$$f" || exit 1; done
+	@for f in $(PROJECT_ROOT)/internal/tests/test_*.sh; do bash "$$f" || exit 1; done

@@ -1,6 +1,6 @@
 runs/
 secrets/
-tests/
+internal/tests/
 docs/
 .git/
 genesis.json

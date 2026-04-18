@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/helpers.sh — Minimal test assertion helpers.
+# internal/tests/helpers.sh — Minimal test assertion helpers.
 set -euo pipefail
 
 _PASS=0
