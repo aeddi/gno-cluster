@@ -134,6 +134,16 @@ is_running() {
   docker compose -f "$compose_file" ps --status running -q 2>/dev/null | grep -q .
 }
 
+# Returns the max string length across all args. Used to size table columns
+# to actual content (e.g. gno `gpub1...` pubkeys exceed a naive 96-char width).
+_max_width() {
+  local maxw=0 s
+  for s in "$@"; do
+    ((${#s} > maxw)) && maxw=${#s}
+  done
+  echo "$maxw"
+}
+
 # Per-process cache for node info. Indexed arrays (bash 3.2 compatible).
 _NODE_CACHED=()
 _NODE_ADDR=()
@@ -992,9 +1002,10 @@ _infos_node_identities() {
     valset_addrs=$(parse_genesis_validators "$genesis" | cut -d'|' -f1)
   fi
 
-  echo "==> Node identities"
-  printf "    %-8s  %-44s  %-96s  %s\n" "Moniker" "Address" "PubKey" "In valset"
-  printf "    %-8s  %-44s  %-96s  %s\n" "-------" "-------" "------" "---------"
+  # Collect all rows first so column widths can be computed from actual data.
+  # gno's gpub1... keys exceed a naive hardcoded column width, which silently
+  # misaligns every row relative to its header.
+  local -a monikers addrs pubkeys flags
   local i in_valset
   for i in $(seq 1 "$NUM_NODES"); do
     get_node_info "$i"
@@ -1003,22 +1014,59 @@ _infos_node_identities() {
     else
       in_valset="no"
     fi
-    printf "    %-8s  %-44s  %-96s  %s\n" \
-      "node-${i}" "$_addr" "$_pubkey" "$in_valset"
+    monikers+=("node-${i}")
+    addrs+=("$_addr")
+    pubkeys+=("$_pubkey")
+    flags+=("$in_valset")
+  done
+
+  local w_m w_a w_p w_v
+  w_m=$(_max_width "Moniker" "${monikers[@]}")
+  w_a=$(_max_width "Address" "${addrs[@]}")
+  w_p=$(_max_width "PubKey" "${pubkeys[@]}")
+  w_v=$(_max_width "In valset" "${flags[@]}")
+
+  echo "==> Node identities"
+  printf "    %-*s  %-*s  %-*s  %-*s\n" \
+    "$w_m" "Moniker" "$w_a" "Address" "$w_p" "PubKey" "$w_v" "In valset"
+  printf "    %-*s  %-*s  %-*s  %-*s\n" \
+    "$w_m" "-------" "$w_a" "-------" "$w_p" "------" "$w_v" "---------"
+  local j
+  for j in "${!monikers[@]}"; do
+    printf "    %-*s  %-*s  %-*s  %-*s\n" \
+      "$w_m" "${monikers[$j]}" \
+      "$w_a" "${addrs[$j]}" \
+      "$w_p" "${pubkeys[$j]}" \
+      "$w_v" "${flags[$j]}"
   done
 }
 
 _infos_node_network() {
-  echo "==> Node network (host-accessible; localhost ports are Docker port-forwards)"
-  printf "    %-8s  %-70s  %s\n" "Moniker" "P2P" "RPC"
-  printf "    %-8s  %-70s  %s\n" "-------" "---" "---"
+  local -a monikers p2ps rpcs
   local i rpc_port p2p_port node_id
   for i in $(seq 1 "$NUM_NODES"); do
     rpc_port=$((GNOLAND_RPC_PORT_BASE + i - 1))
     p2p_port=$((GNOLAND_P2P_PORT_BASE + i - 1))
     node_id=$(cat "internal/secrets/node-${i}/node_id" 2>/dev/null || echo "?")
-    printf "    %-8s  %-70s  http://localhost:%s\n" \
-      "node-${i}" "${node_id}@localhost:${p2p_port}" "$rpc_port"
+    monikers+=("node-${i}")
+    p2ps+=("${node_id}@localhost:${p2p_port}")
+    rpcs+=("http://localhost:${rpc_port}")
+  done
+
+  local w_m w_p w_r
+  w_m=$(_max_width "Moniker" "${monikers[@]}")
+  w_p=$(_max_width "P2P" "${p2ps[@]}")
+  w_r=$(_max_width "RPC" "${rpcs[@]}")
+
+  echo "==> Node network (host-accessible; localhost ports are Docker port-forwards)"
+  printf "    %-*s  %-*s  %-*s\n" "$w_m" "Moniker" "$w_p" "P2P" "$w_r" "RPC"
+  printf "    %-*s  %-*s  %-*s\n" "$w_m" "-------" "$w_p" "---" "$w_r" "---"
+  local j
+  for j in "${!monikers[@]}"; do
+    printf "    %-*s  %-*s  %-*s\n" \
+      "$w_m" "${monikers[$j]}" \
+      "$w_p" "${p2ps[$j]}" \
+      "$w_r" "${rpcs[$j]}"
   done
 }
 
