@@ -51,4 +51,25 @@ assert_contains "no txs field" "txs_count=0" "$result"
 assert_contains "no txs: 2 balances" "balances_count=2" "$result"
 rm -f "$TMP"
 
+# Validators without .name field: the "// """ default in parse_genesis_validators
+# produces an empty trailing segment.
+echo "-- validators without name --"
+TMP=$(mktemp)
+cat > "$TMP" <<'EOF'
+{
+  "validators": [
+    {
+      "address": "g1nameless",
+      "pub_key": {"@type": "/tm.PubKeyEd25519", "value": "ZZZZ"},
+      "power": "3"
+    }
+  ],
+  "app_state": {"balances": [], "txs": []}
+}
+EOF
+val_result=$(parse_genesis_validators "$TMP")
+assert_line_count "1 nameless validator" "1" "$val_result"
+assert_eq "nameless: trailing empty name" "g1nameless|ZZZZ|3|" "$val_result"
+rm -f "$TMP"
+
 summary

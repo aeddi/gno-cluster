@@ -72,6 +72,23 @@ assert_eq "ring 4: node-2 peers" "1 3" "$result"
 result=$(get_peers ring 4 4)
 assert_eq "ring 4: node-4 peers" "3 1" "$result"
 
+# Ring 3: smallest non-trivial wrap — every node has exactly two peers.
+result=$(get_peers ring 3 1)
+assert_eq "ring 3: node-1 peers" "2 3" "$result"
+
+result=$(get_peers ring 3 2)
+assert_eq "ring 3: node-2 peers" "1 3" "$result"
+
+result=$(get_peers ring 3 3)
+assert_eq "ring 3: node-3 peers" "2 1" "$result"
+
+# Ring 2: single edge, no wrap (would duplicate the edge).
+result=$(get_peers ring 2 1)
+assert_eq "ring 2: node-1 peers" "2" "$result"
+
+result=$(get_peers ring 2 2)
+assert_eq "ring 2: node-2 peers" "1" "$result"
+
 # ---- get_node_networks
 echo "-- get_node_networks --"
 
