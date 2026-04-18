@@ -70,7 +70,7 @@ LABEL watchtower.commit="${WATCHTOWER_COMMIT_HASH}" \
       watchtower.repo="${WATCHTOWER_REPO}" \
       build.date="${BUILD_DATE}"
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates gcompat libgcc
 
 COPY --from=watchtower-builder /build/watchtower /usr/local/bin/watchtower
 
@@ -89,7 +89,7 @@ LABEL sentinel.commit="${WATCHTOWER_COMMIT_HASH}" \
       sentinel.repo="${WATCHTOWER_REPO}" \
       build.date="${BUILD_DATE}"
 
-RUN apk add --no-cache ca-certificates docker-cli
+RUN apk add --no-cache ca-certificates docker-cli gcompat libgcc
 
 COPY --from=watchtower-builder /build/sentinel /usr/local/bin/sentinel
 
