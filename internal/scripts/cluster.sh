@@ -1401,7 +1401,7 @@ status) cmd_status "$@" ;;
 logs) cmd_logs "$@" ;;
 infos) cmd_infos "$@" ;;
 list) cmd_list ;;
-update) cmd_update ;;
+update) cmd_update "$@" ;;
 clean) cmd_clean "$@" ;;
 clean-runs) cmd_clean_runs "$@" ;;
 clean-imgs) cmd_clean_imgs "$@" ;;
