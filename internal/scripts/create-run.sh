@@ -95,7 +95,7 @@ bash "${SCRIPTS_DIR}/generate-compose.sh" \
   "$RUN_DIR" "$NUM_NODES" "$TOPOLOGY" \
   "$RPC_PORT_BASE" "$P2P_PORT_BASE" "$GRAFANA_PORT" \
   "$VICTORIA_METRICS_PORT" "$LOKI_PORT" \
-  "$TEMPLATES_DIR" "$SECRETS_DIR"
+  "$TEMPLATES_DIR"
 
 # ---- Update current symlink
 ln -sfn "$RUN_DIR" "${PROJECT_ROOT}/runs/current"

@@ -3,9 +3,9 @@
 #
 # Usage: generate-compose.sh <run_dir> <num_nodes> <topology> <rpc_port_base> \
 #            <p2p_port_base> <grafana_port> <victoria_metrics_port> <loki_port> \
-#            <templates_dir> <secrets_dir>
+#            <templates_dir>
 #
-# Reads node IDs from <secrets_dir>/node-N/node_id to build peer addresses.
+# Reads node IDs from <run_dir>/gnoland-data-N/secrets/node_id to build peer addresses.
 # Sources topology.sh for network computation.
 set -euo pipefail
 
@@ -22,7 +22,6 @@ GRAFANA_PORT="$6"
 VICTORIA_METRICS_PORT="$7"
 LOKI_PORT="$8"
 TEMPLATES_DIR="$9"
-SECRETS_DIR="${10}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/topology.sh"
@@ -34,18 +33,12 @@ echo "  Generating docker-compose.yml (${NUM_NODES} nodes, ${TOPOLOGY} topology)
 # ---- Collect node IDs for peer address generation (indexed array, bash 3.2 compatible)
 NODE_IDS=()
 for i in $(seq 1 "$NUM_NODES"); do
-  NODE_KEY_FILE="${RUN_DIR}/gnoland-data-${i}/secrets/node_key.json"
-  if [[ ! -f "$NODE_KEY_FILE" ]]; then
-    echo "Error: ${NODE_KEY_FILE} not found. Run 'make create' first." >&2
-    exit 1
-  fi
-  NODE_ID_FILE="${SECRETS_DIR}/node-${i}/node_id"
-  if [[ -f "$NODE_ID_FILE" ]]; then
-    NODE_IDS[$i]=$(cat "$NODE_ID_FILE")
-  else
+  NODE_ID_FILE="${RUN_DIR}/gnoland-data-${i}/secrets/node_id"
+  if [[ ! -f "$NODE_ID_FILE" ]]; then
     echo "Error: ${NODE_ID_FILE} not found. Run 'make create' first." >&2
     exit 1
   fi
+  NODE_IDS[$i]=$(cat "$NODE_ID_FILE")
 done
 
 # ---- Build peer strings per node
