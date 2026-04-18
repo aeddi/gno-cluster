@@ -134,19 +134,47 @@ is_running() {
   docker compose -f "$compose_file" ps --status running -q 2>/dev/null | grep -q .
 }
 
-# Retrieves address, pubkey, and node_id for a given node index using gnoland secrets get -raw.
+# Per-process cache for node info. Indexed arrays (bash 3.2 compatible).
+_NODE_CACHED=()
+_NODE_ADDR=()
+_NODE_PUBKEY=()
+_NODE_ID=()
+
+# Fetches address + pubkey for ALL NUM_NODES nodes in a SINGLE docker call,
+# then fills the per-process cache. node_id is read from the host-side file
+# (it was written there by _ensure_node_secrets, no docker needed).
+# Output format inside the container: two lines per node — address, pubkey.
+_fetch_all_node_info() {
+  local result line_idx=1 i
+  result=$(docker run --rm --entrypoint bash \
+    -v "${PROJECT_ROOT}/internal/secrets:/secrets:ro" \
+    "$GNOLAND_IMAGE" \
+    -c "for i in \$(seq 1 ${NUM_NODES}); do
+          gnoland secrets get validator_key.address -raw --data-dir /secrets/node-\$i
+          gnoland secrets get validator_key.pub_key -raw --data-dir /secrets/node-\$i
+        done" 2>/dev/null)
+  for i in $(seq 1 "$NUM_NODES"); do
+    _NODE_ADDR[$i]=$(echo "$result" | sed -n "${line_idx}p")
+    line_idx=$((line_idx + 1))
+    _NODE_PUBKEY[$i]=$(echo "$result" | sed -n "${line_idx}p")
+    line_idx=$((line_idx + 1))
+    _NODE_ID[$i]=$(cat "internal/secrets/node-${i}/node_id" 2>/dev/null || echo "unknown")
+    _NODE_CACHED[$i]=1
+  done
+}
+
+# Retrieves address, pubkey, and node_id for a given node index.
 # Sets variables: _addr, _pubkey, _node_id
+# First call for any node triggers a single batched fetch for all nodes;
+# subsequent calls (within the same process) are served from cache.
 get_node_info() {
   local idx="$1"
-  _addr=$(gnoland_run \
-    -v "${PROJECT_ROOT}/internal/secrets/node-${idx}:/gnoland-data" \
-    "$GNOLAND_IMAGE" \
-    secrets get validator_key.address -raw --data-dir /gnoland-data 2>/dev/null)
-  _pubkey=$(gnoland_run \
-    -v "${PROJECT_ROOT}/internal/secrets/node-${idx}:/gnoland-data" \
-    "$GNOLAND_IMAGE" \
-    secrets get validator_key.pub_key -raw --data-dir /gnoland-data 2>/dev/null)
-  _node_id=$(cat "internal/secrets/node-${idx}/node_id" 2>/dev/null || echo "unknown")
+  if [[ "${_NODE_CACHED[$idx]:-}" != "1" ]]; then
+    _fetch_all_node_info
+  fi
+  _addr="${_NODE_ADDR[$idx]}"
+  _pubkey="${_NODE_PUBKEY[$idx]}"
+  _node_id="${_NODE_ID[$idx]}"
 }
 
 validate_port_ranges() {
@@ -347,10 +375,12 @@ _print_node_info_table() {
 
 # Prints a suggested initial validator set in bash-array form, one entry per
 # node as "<moniker> <power> <pubkey>". Printed when genesis.json is missing
-# so the user can drop these straight into their genesis builder.
+# so the user can drop these straight into their genesis builder. Caller can
+# pass a custom leading line (e.g. "No genesis.json found. Suggested …").
 _print_initial_valset() {
+  local prefix="${1:-Suggested initial validator set (copy into your genesis builder):}"
   echo ""
-  echo "Suggested initial validator set (copy into your genesis builder):"
+  echo "$prefix"
   echo ""
   echo "INITIAL_VALSET=("
   local i
@@ -468,9 +498,9 @@ cmd_create() {
         _print_initial_valset
         exit 1
       fi
-      _print_initial_valset
+      _print_initial_valset "No genesis.json found. Suggested initial validator set (copy into your genesis builder):"
       echo ""
-      echo "No genesis.json found. Copy your genesis.json to ${genesis}, then press Enter."
+      echo "Copy your genesis.json to ${genesis}, then press Enter."
       read -r _
       continue
     fi
