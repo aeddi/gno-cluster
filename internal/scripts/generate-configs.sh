@@ -12,6 +12,11 @@ RUN_DIR="$1"
 NUM_NODES="$2"
 TEMPLATES_DIR="$3"
 
+# Tokens are shared secrets between watchtower and each sentinel; make sure
+# they don't survive on disk even if the script fails between the two loops.
+cleanup_tokens() { rm -f "${RUN_DIR}"/.token-*; }
+trap cleanup_tokens EXIT
+
 echo "  Generating watchtower config..."
 
 # ---- Watchtower config: start from template, append per-node validator blocks
@@ -43,8 +48,5 @@ for i in $(seq 1 "$NUM_NODES"); do
 
   echo "    Generated sentinel-${i}-config.toml"
 done
-
-# Clean up token files
-rm -f "${RUN_DIR}"/.token-*
 
 echo "  Config generation complete."
