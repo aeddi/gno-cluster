@@ -144,38 +144,75 @@ _NODE_CACHED=()
 _NODE_ADDR=()
 _NODE_PUBKEY=()
 _NODE_ID=()
+_NODE_CACHE_KEY=""
+
+# Echoes the host-side secrets directory for node <idx>. When run_dir is empty,
+# uses the project-root secrets (layout: internal/secrets/node-<idx>/). When
+# run_dir is set, uses the run's pinned per-node secrets so a past run's info
+# stays correct even if internal/secrets/ was regenerated or reset.
+_node_secrets_path() {
+  local idx="$1" run_dir="${2:-}"
+  if [[ -n "$run_dir" ]]; then
+    echo "${run_dir}/gnoland-data-${idx}/secrets"
+  else
+    echo "${PROJECT_ROOT}/internal/secrets/node-${idx}"
+  fi
+}
 
 # Fetches address + pubkey for ALL NUM_NODES nodes in a SINGLE docker call,
 # then fills the per-process cache. node_id is read from the host-side file
 # (it was written there by _ensure_node_secrets, no docker needed).
 # Output format inside the container: two lines per node — address, pubkey.
+# When run_dir is given, reads from the run's pinned secrets instead of the
+# project-root secrets tree (see _node_secrets_path).
 _fetch_all_node_info() {
-  local result line_idx=1 i
+  local run_dir="${1:-}"
+  local mount_src secrets_subpath
+  # secrets_subpath MUST be single-quoted — the `$i` inside is a loop variable
+  # of the container-side bash (see docker run -c below). Switching to double
+  # quotes would expand $i on the host side, which is unset here and would
+  # abort under `set -u`.
+  if [[ -n "$run_dir" ]]; then
+    mount_src="$run_dir"
+    secrets_subpath='gnoland-data-$i/secrets'
+  else
+    mount_src="${PROJECT_ROOT}/internal/secrets"
+    secrets_subpath='node-$i'
+  fi
+
+  local result
   result=$(docker run --rm --entrypoint bash \
-    -v "${PROJECT_ROOT}/internal/secrets:/secrets:ro" \
+    -v "${mount_src}:/mount:ro" \
     "$GNOLAND_IMAGE" \
     -c "for i in \$(seq 1 ${NUM_NODES}); do
-          gnoland secrets get validator_key.address -raw --data-dir /secrets/node-\$i
-          gnoland secrets get validator_key.pub_key -raw --data-dir /secrets/node-\$i
+          gnoland secrets get validator_key.address -raw --data-dir /mount/${secrets_subpath}
+          gnoland secrets get validator_key.pub_key -raw --data-dir /mount/${secrets_subpath}
         done" 2>/dev/null)
+
+  local line_idx=1 i node_id_file
   for i in $(seq 1 "$NUM_NODES"); do
     _NODE_ADDR[$i]=$(echo "$result" | sed -n "${line_idx}p")
     line_idx=$((line_idx + 1))
     _NODE_PUBKEY[$i]=$(echo "$result" | sed -n "${line_idx}p")
     line_idx=$((line_idx + 1))
-    _NODE_ID[$i]=$(cat "internal/secrets/node-${i}/node_id" 2>/dev/null || echo "unknown")
+    node_id_file="$(_node_secrets_path "$i" "$run_dir")/node_id"
+    _NODE_ID[$i]=$(cat "$node_id_file" 2>/dev/null || echo "unknown")
     _NODE_CACHED[$i]=1
   done
+  _NODE_CACHE_KEY="$run_dir"
 }
 
 # Retrieves address, pubkey, and node_id for a given node index.
 # Sets variables: _addr, _pubkey, _node_id
 # First call for any node triggers a single batched fetch for all nodes;
 # subsequent calls (within the same process) are served from cache.
+# run_dir may be set to fetch from a run's pinned secrets; the cache is keyed
+# on run_dir so switching contexts within one process re-fetches cleanly.
 get_node_info() {
-  local idx="$1"
-  if [[ "${_NODE_CACHED[$idx]:-}" != "1" ]]; then
-    _fetch_all_node_info
+  local idx="$1" run_dir="${2:-}"
+  if [[ "${_NODE_CACHED[$idx]:-}" != "1" || "${_NODE_CACHE_KEY}" != "${run_dir}" ]]; then
+    _NODE_CACHED=()
+    _fetch_all_node_info "$run_dir"
   fi
   _addr="${_NODE_ADDR[$idx]}"
   _pubkey="${_NODE_PUBKEY[$idx]}"
@@ -1006,7 +1043,7 @@ _infos_node_identities() {
   local -a monikers addrs pubkeys flags
   local i in_valset
   for i in $(seq 1 "$NUM_NODES"); do
-    get_node_info "$i"
+    get_node_info "$i" "$run_dir"
     if [[ -n "$valset_addrs" ]] && grep -qFx "$_addr" <<<"$valset_addrs"; then
       in_valset="yes"
     else
@@ -1040,12 +1077,14 @@ _infos_node_identities() {
 }
 
 _infos_node_network() {
+  local run_dir="$1"
   local -a monikers p2ps rpcs
-  local i rpc_port p2p_port node_id
+  local i rpc_port p2p_port node_id node_id_file
   for i in $(seq 1 "$NUM_NODES"); do
     rpc_port=$((GNOLAND_RPC_PORT_BASE + i - 1))
     p2p_port=$((GNOLAND_P2P_PORT_BASE + i - 1))
-    node_id=$(cat "internal/secrets/node-${i}/node_id" 2>/dev/null || echo "?")
+    node_id_file="$(_node_secrets_path "$i" "$run_dir")/node_id"
+    node_id=$(cat "$node_id_file" 2>/dev/null || echo "?")
     monikers+=("node-${i}")
     p2ps+=("${node_id}@localhost:${p2p_port}")
     rpcs+=("http://localhost:${rpc_port}")
@@ -1151,10 +1190,15 @@ cmd_infos() {
     source "${run_dir}/cluster.env"
   fi
 
-  if [[ ! -d internal/secrets ]]; then
-    echo "Error: internal/secrets/ not found. Run 'make create' first."
-    exit 1
-  fi
+  # The run's own gnoland-data-N/secrets/ are the source of truth for a past
+  # run; internal/secrets/ may have been regenerated or reset since creation.
+  local i
+  for i in $(seq 1 "$NUM_NODES"); do
+    if [[ ! -d "${run_dir}/gnoland-data-${i}/secrets" ]]; then
+      echo "Error: ${run_dir}/gnoland-data-${i}/secrets not found. Run may be corrupted."
+      exit 1
+    fi
+  done
 
   _infos_header "$run_dir"
   echo ""
@@ -1164,7 +1208,7 @@ cmd_infos() {
   echo ""
   _infos_node_identities "$run_dir"
   echo ""
-  _infos_node_network
+  _infos_node_network "$run_dir"
 }
 
 # ---- Update
