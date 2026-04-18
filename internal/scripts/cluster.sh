@@ -524,6 +524,8 @@ cmd_create() {
       return
       ;;
     r | R | replace)
+      _print_initial_valset
+      echo ""
       echo "Copy your new genesis.json to ${genesis}, then press Enter."
       read -r _
       continue
