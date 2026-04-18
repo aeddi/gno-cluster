@@ -14,6 +14,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CURRENT_LINK="${PROJECT_ROOT}/runs/current"
 GNOLAND_IMAGE="gno-cluster-gnoland:latest"
 
+# Operate from the project root so CWD-relative paths (secrets/, internal/,
+# docker build context ".", etc.) resolve correctly regardless of whether
+# make was invoked from the project dir, via `make -C`, or via `make -f`.
+cd "${PROJECT_ROOT:?PROJECT_ROOT is not set; invoke cluster.sh via make}"
+
 # shellcheck source=image-tags.sh
 source "${SCRIPT_DIR}/image-tags.sh"
 # shellcheck source=build-state.sh
