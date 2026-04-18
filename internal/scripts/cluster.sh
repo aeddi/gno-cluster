@@ -374,11 +374,14 @@ cmd_create() {
     fi
     validate_port_ranges "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$NUM_NODES"
 
+    # If a cluster is currently running, prepare the new run without flipping
+    # runs/current away from it — observability tools (status/infos/list) stay
+    # correct, and the user can explicitly switch with `make start run=<name>`
+    # once they stop the running cluster.
+    local preserve_current=""
     local current
     if current=$(resolve_current_run) && is_running "${current}/docker-compose.yml"; then
-        echo "Error: a cluster is currently running ($(basename "$current"))."
-        echo "  Run 'make stop' first."
-        exit 1
+        preserve_current="$current"
     fi
 
     local interactive=1
@@ -451,7 +454,18 @@ cmd_create() {
     write_build_state "${new_run}/.build-state"
 
     echo ""
-    echo "==> Run created. Run 'make start' to start the cluster."
+    if [[ -n "$preserve_current" ]]; then
+        # Restore runs/current to the still-running cluster — the new run is
+        # prepared but not adopted.
+        ln -sfn "$preserve_current" "$CURRENT_LINK"
+        echo "==> Run created at runs/$(basename "$new_run")"
+        echo "    A cluster is still running on $(basename "$preserve_current"); runs/current stays pointed at it."
+        echo "    To switch to the new run:"
+        echo "      make stop"
+        echo "      make start run=$(basename "$new_run")"
+    else
+        echo "==> Run created. Run 'make start' to start the cluster."
+    fi
 }
 
 # ---- Start
@@ -745,7 +759,12 @@ _infos_header() {
     local name date_str state height loki_sz vm_sz
     name=$(basename "$run_dir")
     date_str=$(_run_creation_date "$name")
-    if is_running "${run_dir}/docker-compose.yml"; then
+    # Only the current run can be running (all runs share the same compose
+    # project name; is_running on a non-current run's compose file would give
+    # a false positive when another run's containers are up).
+    local current_dir=""
+    current_dir=$(resolve_current_run 2>/dev/null || true)
+    if [[ "$run_dir" == "$current_dir" ]] && is_running "${run_dir}/docker-compose.yml"; then
         state=$(_color 32 "running")
     else
         state=$(_color 31 "stopped")
@@ -871,10 +890,19 @@ cmd_list() {
     echo "==> Runs (${#runs[@]} total)"
     echo ""
 
+    # Only one run can be "running" at a time — host ports collide and all runs
+    # share the same compose project name. is_running compared across compose
+    # files under the same project label can't distinguish run folders, so we
+    # gate on the run being the current one.
+    local current_running=0
+    if [[ -n "$current_dir" ]] && is_running "${current_dir}/docker-compose.yml"; then
+        current_running=1
+    fi
+
     local run name state_label marker nodes topology height gno_sz loki_sz vm_sz total_sz
     for run in "${runs[@]}"; do
         name=$(basename "$run")
-        if is_running "${run}/docker-compose.yml"; then
+        if [[ "$name" == "$current_name" && "$current_running" == "1" ]]; then
             state_label=$(_color 32 "running")
         else
             state_label=$(_color 31 "stopped")

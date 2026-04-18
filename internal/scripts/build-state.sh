@@ -45,11 +45,9 @@ write_build_state() {
         "internal/scripts/parse-overrides.sh")
 
     local tmp
-    tmp=$(mktemp "${out_file}.tmp.XXXXXX")
-    # Clean up the temp file on any non-local exit from this function.
-    trap 'rm -f "$tmp"' RETURN
+    tmp=$(mktemp "${out_file}.tmp.XXXXXX") || return 1
 
-    {
+    if ! {
         echo "# Build state snapshot — inputs used when this run's images were last built."
         echo "# Compared by make start to detect drift. Do not edit by hand."
         echo ""
@@ -73,9 +71,12 @@ write_build_state() {
             [[ -n "$line" ]] && printf '    "%s"\n' "$line"
         done <<< "$file_lines"
         echo ")"
-    } > "$tmp"
+    } > "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
 
-    mv -f "$tmp" "$out_file"
+    mv -f "$tmp" "$out_file" || { rm -f "$tmp"; return 1; }
 }
 
 # Reads <file> in a subshell (so sourcing doesn't clobber the caller's env) and
