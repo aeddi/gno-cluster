@@ -762,8 +762,8 @@ render_status() {
   local nodes="$1" rpc_base="$2" run_name="$3" eol="${4:-}"
   printf "Run: %s${eol}\n" "$run_name"
   printf "${eol}\n"
-  printf "%-10s %-12s %-8s %-24s %s${eol}\n" "Node" "Status" "Height" "Latest Block" "Peers"
-  printf "%-10s %-12s %-8s %-24s %s${eol}\n" "----" "------" "------" "------------" "-----"
+  printf "%-10s %-12s %-8s %-24s %-7s %s${eol}\n" "Node" "Status" "Height" "Latest Block" "Peers" "Validator"
+  printf "%-10s %-12s %-8s %-24s %-7s %s${eol}\n" "----" "------" "------" "------------" "-----" "---------"
 
   for i in $(seq 1 "$nodes"); do
     local port=$((rpc_base + i - 1))
@@ -771,14 +771,28 @@ render_status() {
     result=$(http_get "http://localhost:${port}/status") || true
 
     if [[ -z "$result" ]]; then
-      printf "%-10s %-12s %-8s %-24s %s${eol}\n" "node-${i}" "unreachable" "-" "-" "-"
+      printf "%-10s %-12s %-8s %-24s %-7s %s${eol}\n" "node-${i}" "unreachable" "-" "-" "-" "-"
     else
-      local height block_time num_peers net_info
+      local height block_time num_peers net_info catching_up vp status validator
       height=$(echo "$result" | jq -r '.result.sync_info.latest_block_height // "-"' 2>/dev/null || echo "-")
       block_time=$(echo "$result" | jq -r '.result.sync_info.latest_block_time // "-"' 2>/dev/null | cut -c1-19)
+      catching_up=$(echo "$result" | jq -r '.result.sync_info.catching_up // false' 2>/dev/null || echo "false")
+      vp=$(echo "$result" | jq -r '.result.validator_info.voting_power // "0"' 2>/dev/null || echo "0")
       net_info=$(http_get "http://localhost:${port}/net_info") || true
       num_peers=$(echo "$net_info" | jq -r '.result.n_peers // "-"' 2>/dev/null || echo "-")
-      printf "%-10s %-12s %-8s %-24s %s${eol}\n" "node-${i}" "running" "${height:-?}" "${block_time:-?}" "${num_peers:-?}"
+
+      if [[ "$catching_up" == "true" ]]; then
+        status="syncing"
+      else
+        status="running"
+      fi
+      if [[ "$vp" == "0" || -z "$vp" ]]; then
+        validator="no"
+      else
+        validator="yes (VP ${vp})"
+      fi
+
+      printf "%-10s %-12s %-8s %-24s %-7s %s${eol}\n" "node-${i}" "$status" "${height:-?}" "${block_time:-?}" "${num_peers:-?}" "$validator"
     fi
   done
 }
