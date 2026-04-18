@@ -10,7 +10,11 @@
 set -euo pipefail
 
 TMPFILES=()
-cleanup() { rm -f "${TMPFILES[@]}"; }
+# Guard the array access: bash 3.2 treats "${arr[@]}" on an empty array as
+# unbound under `set -u`, so firing the trap before TMPFILES is populated
+# (e.g. missing arg below) would stack an "unbound variable" error on top
+# of the real failure.
+cleanup() { [[ ${#TMPFILES[@]} -gt 0 ]] && rm -f "${TMPFILES[@]}"; }
 trap cleanup EXIT
 
 RUN_DIR="$1"
