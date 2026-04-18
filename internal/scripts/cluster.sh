@@ -2,8 +2,8 @@
 # internal/scripts/cluster.sh — Main entry point for gno-cluster operations.
 #
 # Usage: cluster.sh <command> [args]
-# Commands: build, create, list, start, stop, restart, clone, status, logs,
-#           infos, update, clean, clean-runs, clean-imgs
+# Commands: build, create, list, start, stop, restart, clone, clone-full,
+#           status, logs, infos, update, clean, clean-runs, clean-imgs
 #
 # Expects environment variables (set by Makefile or cluster.env):
 #   PROJECT_ROOT, GNO_VERSION, GNO_REPO, WATCHTOWER_VERSION, WATCHTOWER_REPO,
@@ -334,12 +334,14 @@ _ensure_node_secrets() {
 _print_node_info_table() {
   echo ""
   echo "==> Node information:"
-  printf "  %-12s %-44s %-96s %s\n" "Moniker" "Address" "PubKey" "Node ID"
-  printf "  %-12s %-44s %-96s %s\n" "-------" "-------" "------" "-------"
   local i
   for i in $(seq 1 "$NUM_NODES"); do
     get_node_info "$i"
-    printf "  %-12s %-44s %-96s %s\n" "node-${i}" "$_addr" "$_pubkey" "$_node_id"
+    echo ""
+    echo "  node-${i}"
+    echo "    - address: ${_addr}"
+    echo "    - pubkey:  ${_pubkey}"
+    echo "    - node id: ${_node_id}"
   done
 }
 
@@ -601,26 +603,29 @@ cmd_restart() {
 
 # ---- Clone
 
-cmd_clone() {
+# Resolves the source run dir from a `run=` arg (or the current run if empty),
+# stops it if running, and echoes the canonical path on stdout. Used by both
+# cmd_clone and cmd_clone_full.
+_clone_resolve_source() {
   local run_arg="${1:-}"
   local source_dir
-
   if [[ -n "$run_arg" ]]; then
-    source_dir=$(resolve_run_arg "$run_arg") || exit 1
+    source_dir=$(resolve_run_arg "$run_arg") || return 1
   else
-    source_dir=$(require_current_run) || exit 1
+    source_dir=$(require_current_run) || return 1
   fi
-
-  # Stop source if running
   if is_running "${source_dir}/docker-compose.yml"; then
-    echo "==> Stopping source run first..."
-    docker compose -f "${source_dir}/docker-compose.yml" down
+    echo "==> Stopping source run first..." >&2
+    docker compose -f "${source_dir}/docker-compose.yml" down >&2
   fi
+  echo "$source_dir"
+}
 
-  echo "==> Cloning from: $(basename "$source_dir")"
-
-  # Read metadata from source env (in a subshell to avoid polluting our env)
-  local repo_slug version nodes timestamp new_name new_dir
+# Computes the destination run folder path with a fresh timestamp, based on the
+# source's cluster.env + genesis. Echoes the full path, creates the directory.
+_clone_new_dir() {
+  local source_dir="$1"
+  local repo_slug version nodes timestamp new_name new_dir validators_count balances_count txs_count
   eval "$(
     source "${SCRIPT_DIR}/parse-genesis.sh"
     . "${source_dir}/cluster.env" 2>/dev/null || true
@@ -635,22 +640,33 @@ cmd_clone() {
   timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
   new_name="${timestamp}_${repo_slug}_${version}_${nodes}-nodes_${validators_count}-vals_${balances_count}-bals_${txs_count}-txs"
   new_dir="${PROJECT_ROOT}/runs/${new_name}"
-
-  echo "  Creating: ${new_name}"
   mkdir -p "$new_dir"
+  echo "$new_dir"
+}
 
-  # Copy configs
+# Clone producing a fresh chain: copies configs + validator/node keys but drops
+# chain db, WAL, validator signing state, and monitoring data. Run the clone
+# from block 0 on the same genesis.
+cmd_clone() {
+  local source_dir new_dir nodes
+  source_dir=$(_clone_resolve_source "${1:-}") || exit 1
+  echo "==> Cloning from: $(basename "$source_dir")"
+  new_dir=$(_clone_new_dir "$source_dir")
+  nodes=$(_run_env_get "$source_dir" NUM_NODES)
+  echo "  Creating: $(basename "$new_dir")"
+
   echo "  Copying configs..."
+  local f
   for f in genesis.json cluster.env config.overrides docker-compose.yml watchtower.toml loki-config.yml .build-state; do
-    if [[ -f "${source_dir}/${f}" ]]; then cp "${source_dir}/${f}" "${new_dir}/${f}"; fi
+    [[ -f "${source_dir}/${f}" ]] && cp "${source_dir}/${f}" "${new_dir}/${f}"
   done
   cp "${source_dir}"/sentinel-*-config.toml "${new_dir}/" 2>/dev/null || true
   if [[ -d "${source_dir}/grafana-provisioning" ]]; then
-    cp -r "${source_dir}/grafana-provisioning" "${new_dir}/grafana-provisioning"
+    cp -R "${source_dir}/grafana-provisioning" "${new_dir}/grafana-provisioning"
   fi
 
-  # Copy secrets, reset chain state
   echo "  Copying secrets, resetting chain state..."
+  local i
   for i in $(seq 1 "$nodes"); do
     mkdir -p "${new_dir}/gnoland-data-${i}/secrets"
     cp "${source_dir}/gnoland-data-${i}/secrets/priv_validator_key.json" "${new_dir}/gnoland-data-${i}/secrets/"
@@ -662,6 +678,30 @@ cmd_clone() {
 
   ln -sfn "$new_dir" "$CURRENT_LINK"
   echo "==> Cloned. Run 'make start' to start."
+}
+
+# Full clone: bit-for-bit copy of the source run including chain db, WAL,
+# validator signing state, Loki logs, VictoriaMetrics data, and Grafana state.
+# The clone resumes at the source's exact height when started.
+#
+# WARNING: starting the clone while the source is also running risks
+# double-signing (same validator_key.json on two height-carrying nodes). The
+# source is stopped before copying; starting the source again after the copy
+# is possible but you must not run both at once.
+cmd_clone_full() {
+  local source_dir new_dir
+  source_dir=$(_clone_resolve_source "${1:-}") || exit 1
+  echo "==> Cloning (full) from: $(basename "$source_dir")"
+  new_dir=$(_clone_new_dir "$source_dir")
+  echo "  Creating: $(basename "$new_dir")"
+
+  echo "  Copying all data (configs, chain, WAL, signing state, loki, victoria, grafana)..."
+  # Copy every entry in the source dir into the new dir. `cp -R source/.`
+  # copies the contents (not the source dir itself), preserving subdirs.
+  cp -R "${source_dir}/." "${new_dir}/"
+
+  ln -sfn "$new_dir" "$CURRENT_LINK"
+  echo "==> Cloned. Run 'make start' to start (the clone resumes at the source's height)."
 }
 
 # ---- Status
@@ -1182,7 +1222,7 @@ cmd_clean() {
 
 # ---- Dispatch
 
-command="${1:?Usage: cluster.sh <command> (build|create|list|start|stop|restart|clone|status|logs|infos|update|clean|clean-runs|clean-imgs)}"
+command="${1:?Usage: cluster.sh <command> (build|create|list|start|stop|restart|clone|clone-full|status|logs|infos|update|clean|clean-runs|clean-imgs)}"
 shift || true
 
 case "$command" in
@@ -1192,6 +1232,7 @@ start) cmd_start "$@" ;;
 stop) cmd_stop ;;
 restart) cmd_restart "$@" ;;
 clone) cmd_clone "$@" ;;
+clone-full) cmd_clone_full "$@" ;;
 status) cmd_status "$@" ;;
 logs) cmd_logs "$@" ;;
 infos) cmd_infos "$@" ;;

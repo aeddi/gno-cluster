@@ -5,6 +5,7 @@
 # Run lifecycle:
 #   create       [yes=1]          Create a new run (yes=1 skips the genesis prompt)
 #   clone        [run=<folder>]   Clone a run with fresh chain state (run= targets a past run, else current)
+#   clone-full   [run=<folder>]   Full clone including chain/WAL/signing state/loki/victoria/grafana data
 #   update       [run=<folder>]   Rebuild drifted images and restart (run= targets a past run, else current)
 #
 # Cluster ops:
@@ -48,7 +49,7 @@ export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GRAFANA_PO
 # and better error handling. The Makefile is just a thin wrapper around it.
 CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 
-.PHONY: help build test create list start stop restart clone status logs infos update clean clean-runs clean-imgs
+.PHONY: help build test create list start stop restart clone clone-full status logs infos update clean clean-runs clean-imgs
 
 help:
 	@awk '/^# Usage:/,/^$$/{sub(/^# ?/,""); print}' $(MAKEFILE_LIST)
@@ -70,6 +71,9 @@ restart:
 
 clone:
 	@$(CLUSTER) clone $(run)
+
+clone-full:
+	@$(CLUSTER) clone-full $(run)
 
 status:
 	@$(CLUSTER) status $(watch)
