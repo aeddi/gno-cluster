@@ -768,6 +768,7 @@ cmd_clone() {
     mkdir -p "${new_dir}/gnoland-data-${i}/secrets"
     cp "${source_dir}/gnoland-data-${i}/secrets/priv_validator_key.json" "${new_dir}/gnoland-data-${i}/secrets/"
     cp "${source_dir}/gnoland-data-${i}/secrets/node_key.json" "${new_dir}/gnoland-data-${i}/secrets/"
+    cp "${source_dir}/gnoland-data-${i}/secrets/node_id" "${new_dir}/gnoland-data-${i}/secrets/"
     printf '{\n  "height": "0",\n  "round": "0",\n  "step": 0\n}\n' \
       >"${new_dir}/gnoland-data-${i}/secrets/priv_validator_state.json"
   done
