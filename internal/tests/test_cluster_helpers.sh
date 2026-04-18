@@ -29,11 +29,11 @@ trap _cleanup EXIT
 mkdir -p "$PROJECT_ROOT_TMP/internal/scripts"
 # Sanity check: `*.sh` glob must match at least one file.
 shopt -s nullglob
-scripts=( "$SCRIPT_DIR/../scripts/"*.sh )
+scripts=("$SCRIPT_DIR/../scripts/"*.sh)
 shopt -u nullglob
 if ((${#scripts[@]} == 0)); then
-    echo "FAIL: no .sh files found in $SCRIPT_DIR/../scripts/" >&2
-    exit 1
+  echo "FAIL: no .sh files found in $SCRIPT_DIR/../scripts/" >&2
+  exit 1
 fi
 cp "${scripts[@]}" "$PROJECT_ROOT_TMP/internal/scripts/"
 export PROJECT_ROOT="$PROJECT_ROOT_TMP"
@@ -43,12 +43,12 @@ cd "$PROJECT_ROOT"
 # before cluster.sh's argv parser. If that marker is renamed or removed the
 # awk becomes a no-op and sourcing would execute dispatch at load time.
 if ! grep -qx '# ---- Dispatch' "$CLUSTER_SH"; then
-    echo "FAIL: expected '# ---- Dispatch' marker in cluster.sh — filter in this test would break." >&2
-    exit 1
+  echo "FAIL: expected '# ---- Dispatch' marker in cluster.sh — filter in this test would break." >&2
+  exit 1
 fi
 
-awk '/^# ---- Dispatch$/{exit} {print}' "$CLUSTER_SH" \
-    | grep -Ev '^set -euo pipefail$|^SCRIPT_DIR=' > "$FILTERED"
+awk '/^# ---- Dispatch$/{exit} {print}' "$CLUSTER_SH" |
+  grep -Ev '^set -euo pipefail$|^SCRIPT_DIR=' >"$FILTERED"
 
 # Point SCRIPT_DIR at the copied scripts so relative source lines resolve.
 SCRIPT_DIR_SAVE="$SCRIPT_DIR"
@@ -80,7 +80,7 @@ assert_eq "run layout: node-4" "${FAKE_RUN}/gnoland-data-4/secrets" "$result"
 # Default arg (no second arg) == empty string.
 result=$(_node_secrets_path 2)
 assert_eq "no run_dir arg: defaults to project layout" \
-    "${PROJECT_ROOT}/internal/secrets/node-2" "$result"
+  "${PROJECT_ROOT}/internal/secrets/node-2" "$result"
 
 # ---- resolve_run_arg
 echo "-- resolve_run_arg --"
@@ -119,16 +119,16 @@ FAKE_HEIGHT_RUN=$(mktemp -d)
 mkdir -p "${FAKE_HEIGHT_RUN}/gnoland-data-1/secrets"
 mkdir -p "${FAKE_HEIGHT_RUN}/gnoland-data-2/secrets"
 printf '{"height": "0",  "round": "0", "step": 0}\n' \
-    > "${FAKE_HEIGHT_RUN}/gnoland-data-1/secrets/priv_validator_state.json"
+  >"${FAKE_HEIGHT_RUN}/gnoland-data-1/secrets/priv_validator_state.json"
 printf '{"height": "500","round": "0", "step": 0}\n' \
-    > "${FAKE_HEIGHT_RUN}/gnoland-data-2/secrets/priv_validator_state.json"
+  >"${FAKE_HEIGHT_RUN}/gnoland-data-2/secrets/priv_validator_state.json"
 
 result=$(_last_block_height "$FAKE_HEIGHT_RUN")
 assert_eq "returns max height across nodes" "500" "$result"
 
 # Node-1 advances; node-2 stays — max should follow.
 printf '{"height": "999","round": "0", "step": 0}\n' \
-    > "${FAKE_HEIGHT_RUN}/gnoland-data-1/secrets/priv_validator_state.json"
+  >"${FAKE_HEIGHT_RUN}/gnoland-data-1/secrets/priv_validator_state.json"
 result=$(_last_block_height "$FAKE_HEIGHT_RUN")
 assert_eq "returns new max when node-1 advances" "999" "$result"
 

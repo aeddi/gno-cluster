@@ -20,9 +20,9 @@ PROJECT_ROOT="$FIX"
 export PROJECT_ROOT
 
 mkdir -p "$FIX/a" "$FIX/b"
-echo "alpha" > "$FIX/a/one.txt"
-echo "beta" > "$FIX/a/two.txt"
-echo "gamma" > "$FIX/b/three.txt"
+echo "alpha" >"$FIX/a/one.txt"
+echo "beta" >"$FIX/a/two.txt"
+echo "gamma" >"$FIX/b/three.txt"
 
 hash1=$(compute_build_hash_for "a" "b")
 
@@ -31,18 +31,18 @@ hash2=$(compute_build_hash_for "a" "b")
 assert_eq "deterministic" "$hash1" "$hash2"
 
 # Change a file → different hash
-echo "changed" > "$FIX/a/one.txt"
+echo "changed" >"$FIX/a/one.txt"
 hash3=$(compute_build_hash_for "a" "b")
 [[ "$hash3" != "$hash1" ]]
 assert_eq "sensitive to file content" "0" "$?"
 
 # Revert → original hash
-echo "alpha" > "$FIX/a/one.txt"
+echo "alpha" >"$FIX/a/one.txt"
 hash4=$(compute_build_hash_for "a" "b")
 assert_eq "reverting restores hash" "$hash1" "$hash4"
 
 # Add a file → different hash
-echo "delta" > "$FIX/a/four.txt"
+echo "delta" >"$FIX/a/four.txt"
 hash5=$(compute_build_hash_for "a" "b")
 [[ "$hash5" != "$hash1" ]]
 assert_eq "sensitive to new files" "0" "$?"
@@ -70,9 +70,9 @@ echo "-- compute_image_tag --"
 
 # Override PROJECT_ROOT so compute_image_tag's internal call to compute_build_hash is stable.
 mkdir -p "$FIX/internal/docker" "$FIX/internal/scripts"
-echo "FROM alpine:3" > "$FIX/internal/Dockerfile"
-echo "echo hi" > "$FIX/internal/docker/gnoland-entrypoint.sh"
-echo "echo hi" > "$FIX/internal/scripts/parse-overrides.sh"
+echo "FROM alpine:3" >"$FIX/internal/Dockerfile"
+echo "echo hi" >"$FIX/internal/docker/gnoland-entrypoint.sh"
+echo "echo hi" >"$FIX/internal/scripts/parse-overrides.sh"
 
 GNO_COMMIT="abc123def456789fedcba98765"
 WT_COMMIT="deadbeef000000000000000000"
@@ -99,9 +99,9 @@ assert_eq "sentinel uses wt commit" "0" "$?"
 
 # All three share the same content-hash suffix (same source tree)
 assert_eq "gnoland/watchtower share content hash" \
-    "${gnoland_tag##*-}" "${watchtower_tag##*-}"
+  "${gnoland_tag##*-}" "${watchtower_tag##*-}"
 assert_eq "watchtower/sentinel share content hash" \
-    "${watchtower_tag##*-}" "${sentinel_tag##*-}"
+  "${watchtower_tag##*-}" "${sentinel_tag##*-}"
 
 # Unknown target errors
 set +e

@@ -18,30 +18,30 @@ echo "  Generating watchtower config..."
 cp "${TEMPLATES_DIR}/watchtower-config.toml.tmpl" "${RUN_DIR}/watchtower.toml"
 
 for i in $(seq 1 "$NUM_NODES"); do
-    TOKEN=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')
-    # Store token for sentinel config generation
-    echo "$TOKEN" > "${RUN_DIR}/.token-${i}"
+  TOKEN=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')
+  # Store token for sentinel config generation
+  echo "$TOKEN" >"${RUN_DIR}/.token-${i}"
 
-    cat >> "${RUN_DIR}/watchtower.toml" <<EOF
+  cat >>"${RUN_DIR}/watchtower.toml" <<EOF
 
 [validators.node-${i}]
 token          = "${TOKEN}"
 permissions    = ["rpc", "metrics", "logs", "otlp"]
 logs_min_level = "debug"
 EOF
-    echo "    Added validator node-${i} to watchtower config"
+  echo "    Added validator node-${i} to watchtower config"
 done
 
 # ---- Sentinel configs: substitute placeholders in template
 for i in $(seq 1 "$NUM_NODES"); do
-    TOKEN=$(cat "${RUN_DIR}/.token-${i}")
-    SENTINEL_CONFIG="${RUN_DIR}/sentinel-${i}-config.toml"
+  TOKEN=$(cat "${RUN_DIR}/.token-${i}")
+  SENTINEL_CONFIG="${RUN_DIR}/sentinel-${i}-config.toml"
 
-    sed -e "s/__N__/${i}/g" \
-        -e "s/__TOKEN__/${TOKEN}/g" \
-        "${TEMPLATES_DIR}/sentinel-config.toml.tmpl" > "$SENTINEL_CONFIG"
+  sed -e "s/__N__/${i}/g" \
+    -e "s/__TOKEN__/${TOKEN}/g" \
+    "${TEMPLATES_DIR}/sentinel-config.toml.tmpl" >"$SENTINEL_CONFIG"
 
-    echo "    Generated sentinel-${i}-config.toml"
+  echo "    Generated sentinel-${i}-config.toml"
 done
 
 # Clean up token files

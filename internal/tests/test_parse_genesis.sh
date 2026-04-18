@@ -31,14 +31,14 @@ assert_contains "val-2 in output" "g1bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|BBB
 
 # Missing file
 if parse_genesis "/nonexistent/genesis.json" 2>/dev/null; then
-    assert_eq "missing file returns error" "should fail" "did not fail"
+  assert_eq "missing file returns error" "should fail" "did not fail"
 else
-    assert_eq "missing file returns error" "1" "$?"
+  assert_eq "missing file returns error" "1" "$?"
 fi
 
 # Genesis without txs field
 TMP=$(mktemp)
-cat > "$TMP" <<'EOF'
+cat >"$TMP" <<'EOF'
 {
   "validators": [{"name": "v1"}],
   "app_state": {
@@ -55,7 +55,7 @@ rm -f "$TMP"
 # produces an empty trailing segment.
 echo "-- validators without name --"
 TMP=$(mktemp)
-cat > "$TMP" <<'EOF'
+cat >"$TMP" <<'EOF'
 {
   "validators": [
     {

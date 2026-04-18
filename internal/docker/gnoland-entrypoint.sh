@@ -21,9 +21,9 @@ gnoland config init -force -config-path "$CONFIG_PATH"
 
 # ---- User Overrides
 if [[ -f /config.overrides ]]; then
-    echo "[${NODE_NAME}] Applying user config overrides..."
-    config_set_cmd() { gnoland config set "$1" "$2" -config-path "$CONFIG_PATH"; }
-    apply_config_overrides "${NODE_NAME}" /config.overrides config_set_cmd
+  echo "[${NODE_NAME}] Applying user config overrides..."
+  config_set_cmd() { gnoland config set "$1" "$2" -config-path "$CONFIG_PATH"; }
+  apply_config_overrides "${NODE_NAME}" /config.overrides config_set_cmd
 fi
 
 # ---- Hardcoded Overrides
@@ -41,14 +41,14 @@ gnoland config set rpc.laddr "tcp://0.0.0.0:26657" -config-path "$CONFIG_PATH"
 # gnoland config set telemetry.service_instance_id "${NODE_NAME}" -config-path "$CONFIG_PATH"
 
 if [[ -n "${PERSISTENT_PEERS:-}" ]]; then
-    gnoland config set p2p.persistent_peers "${PERSISTENT_PEERS}" -config-path "$CONFIG_PATH"
+  gnoland config set p2p.persistent_peers "${PERSISTENT_PEERS}" -config-path "$CONFIG_PATH"
 fi
 
 # ---- Start
 echo "[${NODE_NAME}] Starting gnoland..."
 exec gnoland start \
-    -skip-genesis-sig-verification \
-    -log-level debug \
-    -log-format json \
-    -data-dir /gnoland-data \
-    -genesis /genesis.json
+  -skip-genesis-sig-verification \
+  -log-level debug \
+  -log-format json \
+  -data-dir /gnoland-data \
+  -genesis /genesis.json

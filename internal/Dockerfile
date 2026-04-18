@@ -13,7 +13,7 @@ RUN apk add --no-cache git
 
 WORKDIR /src
 RUN git clone "https://github.com/${GNO_REPO}.git" . \
-    && git checkout "${GNO_COMMIT_HASH:-${GNO_VERSION}}"
+  && git checkout "${GNO_COMMIT_HASH:-${GNO_VERSION}}"
 RUN cd gno.land && go build -o /build/gnoland ./cmd/gnoland
 
 # ---- Gnoland
@@ -26,9 +26,9 @@ ARG GNO_REPO
 ARG BUILD_DATE
 
 LABEL gno.commit="${GNO_COMMIT_HASH}" \
-      gno.version="${GNO_VERSION}" \
-      gno.repo="${GNO_REPO}" \
-      build.date="${BUILD_DATE}"
+  gno.version="${GNO_VERSION}" \
+  gno.repo="${GNO_REPO}" \
+  build.date="${BUILD_DATE}"
 
 RUN apk add --no-cache bash jq
 
@@ -49,13 +49,13 @@ ARG WATCHTOWER_COMMIT_HASH
 ARG WATCHTOWER_VERSION
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git libsystemd-dev && rm -rf /var/lib/apt/lists/*
+  git libsystemd-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 RUN git clone "https://github.com/${WATCHTOWER_REPO}.git" . \
-    && git checkout "${WATCHTOWER_COMMIT_HASH:-${WATCHTOWER_VERSION}}"
+  && git checkout "${WATCHTOWER_COMMIT_HASH:-${WATCHTOWER_VERSION}}"
 RUN go build -o /build/watchtower ./cmd/watchtower \
-    && go build -o /build/sentinel ./cmd/sentinel
+  && go build -o /build/sentinel ./cmd/sentinel
 
 # ---- Watchtower
 FROM alpine:3 AS watchtower
@@ -66,9 +66,9 @@ ARG WATCHTOWER_REPO
 ARG BUILD_DATE
 
 LABEL watchtower.commit="${WATCHTOWER_COMMIT_HASH}" \
-      watchtower.version="${WATCHTOWER_VERSION}" \
-      watchtower.repo="${WATCHTOWER_REPO}" \
-      build.date="${BUILD_DATE}"
+  watchtower.version="${WATCHTOWER_VERSION}" \
+  watchtower.repo="${WATCHTOWER_REPO}" \
+  build.date="${BUILD_DATE}"
 
 RUN apk add --no-cache ca-certificates gcompat libgcc
 
@@ -85,9 +85,9 @@ ARG WATCHTOWER_REPO
 ARG BUILD_DATE
 
 LABEL sentinel.commit="${WATCHTOWER_COMMIT_HASH}" \
-      sentinel.version="${WATCHTOWER_VERSION}" \
-      sentinel.repo="${WATCHTOWER_REPO}" \
-      build.date="${BUILD_DATE}"
+  sentinel.version="${WATCHTOWER_VERSION}" \
+  sentinel.repo="${WATCHTOWER_REPO}" \
+  build.date="${BUILD_DATE}"
 
 RUN apk add --no-cache ca-certificates docker-cli gcompat libgcc
 

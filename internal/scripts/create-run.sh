@@ -26,9 +26,9 @@ source "${SCRIPTS_DIR}/parse-genesis.sh"
 # ---- Validate port ranges
 RPC_END=$((RPC_PORT_BASE + NUM_NODES - 1))
 if ((RPC_END >= P2P_PORT_BASE)); then
-    echo "Error: RPC port range (${RPC_PORT_BASE}-${RPC_END}) overlaps with P2P base (${P2P_PORT_BASE})."
-    echo "  Increase GNOLAND_P2P_PORT_BASE to at least $((RPC_PORT_BASE + NUM_NODES))."
-    exit 1
+  echo "Error: RPC port range (${RPC_PORT_BASE}-${RPC_END}) overlaps with P2P base (${P2P_PORT_BASE})."
+  echo "  Increase GNOLAND_P2P_PORT_BASE to at least $((RPC_PORT_BASE + NUM_NODES))."
+  exit 1
 fi
 
 # ---- Parse genesis for folder name metadata
@@ -52,29 +52,29 @@ echo "  Copying configs..."
 cp "${PROJECT_ROOT}/genesis.json" "${RUN_DIR}/genesis.json"
 cp "${PROJECT_ROOT}/cluster.env" "${RUN_DIR}/cluster.env"
 if [[ -f "${PROJECT_ROOT}/config.overrides" ]]; then
-    cp "${PROJECT_ROOT}/config.overrides" "${RUN_DIR}/config.overrides"
+  cp "${PROJECT_ROOT}/config.overrides" "${RUN_DIR}/config.overrides"
 else
-    touch "${RUN_DIR}/config.overrides"
+  touch "${RUN_DIR}/config.overrides"
 fi
 
 # ---- Copy secrets and set up node data dirs
 echo "  Setting up node data directories..."
 for i in $(seq 1 "$NUM_NODES"); do
-    NODE_DATA="${RUN_DIR}/gnoland-data-${i}"
-    mkdir -p "${NODE_DATA}/secrets"
+  NODE_DATA="${RUN_DIR}/gnoland-data-${i}"
+  mkdir -p "${NODE_DATA}/secrets"
 
-    if [[ ! -d "${SECRETS_DIR}/node-${i}" ]]; then
-        echo "Error: internal/secrets/node-${i} not found. Run 'make create' first." >&2
-        exit 1
-    fi
+  if [[ ! -d "${SECRETS_DIR}/node-${i}" ]]; then
+    echo "Error: internal/secrets/node-${i} not found. Run 'make create' first." >&2
+    exit 1
+  fi
 
-    cp "${SECRETS_DIR}/node-${i}"/* "${NODE_DATA}/secrets/"
+  cp "${SECRETS_DIR}/node-${i}"/* "${NODE_DATA}/secrets/"
 
-    # Reset validator state to genesis
-    printf '{\n  "height": "0",\n  "round": "0",\n  "step": 0\n}\n' \
-        > "${NODE_DATA}/secrets/priv_validator_state.json"
+  # Reset validator state to genesis
+  printf '{\n  "height": "0",\n  "round": "0",\n  "step": 0\n}\n' \
+    >"${NODE_DATA}/secrets/priv_validator_state.json"
 
-    echo "    Prepared gnoland-data-${i}"
+  echo "    Prepared gnoland-data-${i}"
 done
 
 # ---- Copy static configs
@@ -92,10 +92,10 @@ bash "${SCRIPTS_DIR}/generate-configs.sh" "$RUN_DIR" "$NUM_NODES" "$TEMPLATES_DI
 # ---- Generate docker-compose.yml
 echo "==> Generating docker-compose.yml..."
 bash "${SCRIPTS_DIR}/generate-compose.sh" \
-    "$RUN_DIR" "$NUM_NODES" "$TOPOLOGY" \
-    "$RPC_PORT_BASE" "$P2P_PORT_BASE" "$GRAFANA_PORT" \
-    "$VICTORIA_METRICS_PORT" "$LOKI_PORT" \
-    "$TEMPLATES_DIR" "$SECRETS_DIR"
+  "$RUN_DIR" "$NUM_NODES" "$TOPOLOGY" \
+  "$RPC_PORT_BASE" "$P2P_PORT_BASE" "$GRAFANA_PORT" \
+  "$VICTORIA_METRICS_PORT" "$LOKI_PORT" \
+  "$TEMPLATES_DIR" "$SECRETS_DIR"
 
 # ---- Update current symlink
 ln -sfn "$RUN_DIR" "${PROJECT_ROOT}/runs/current"

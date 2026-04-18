@@ -120,32 +120,32 @@ Run `make help` for the full list. Targets fall into three groups:
 
 **Run lifecycle** — manage the set of runs on disk:
 
-| Target | Description |
-| ------ | ----------- |
-| `make create [yes=1]` | Create a new run. `yes=1` skips the genesis confirmation prompt. Builds any missing images. |
-| `make clone [run=<folder>]` | Clone a run with fresh chain state. `run=` targets a past run, otherwise current. |
-| `make clone-full [run=<folder>]` | Bit-for-bit clone including chain db, WAL, signing state, and all monitoring data. Resumes at the source's height. |
-| `make update [run=<folder>]` | Rebuild drifted images and restart the run. `run=` targets a past run, otherwise current. No-op if nothing drifted. |
+| Target                           | Description                                                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `make create [yes=1]`            | Create a new run. `yes=1` skips the genesis confirmation prompt. Builds any missing images.                         |
+| `make clone [run=<folder>]`      | Clone a run with fresh chain state. `run=` targets a past run, otherwise current.                                   |
+| `make clone-full [run=<folder>]` | Bit-for-bit clone including chain db, WAL, signing state, and all monitoring data. Resumes at the source's height.  |
+| `make update [run=<folder>]`     | Rebuild drifted images and restart the run. `run=` targets a past run, otherwise current. No-op if nothing drifted. |
 
 **Cluster ops** — operate on a specific run:
 
-| Target | Description |
-| ------ | ----------- |
-| `make list` | List all runs with state, config, heights, and on-disk sizes. |
-| `make start [run=<folder>]` | Start a run. `run=` switches `runs/current` to a past run. Won't rebuild a pinned run — surfaces drift instead and suggests update/clone. |
-| `make stop` | Stop the current run. Data stays on disk in the run folder. |
-| `make restart [run=<folder>]` | Stop then start. Useful with `run=` to switch and restart in one step. |
-| `make infos [run=<folder>]` | Full report: state, heights, sizes, cluster config, genesis info, node identities, P2P/RPC endpoints. |
-| `make status [watch=<sec>]` | Per-node heights, peer counts, reachability. `watch=<sec>` refreshes every N seconds. |
-| `make logs svc=<service>` | Follow logs for a service (e.g. `node-1`, `sentinel-1`, `watchtower`, `grafana`). |
+| Target                        | Description                                                                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `make list`                   | List all runs with state, config, heights, and on-disk sizes.                                                                             |
+| `make start [run=<folder>]`   | Start a run. `run=` switches `runs/current` to a past run. Won't rebuild a pinned run — surfaces drift instead and suggests update/clone. |
+| `make stop`                   | Stop the current run. Data stays on disk in the run folder.                                                                               |
+| `make restart [run=<folder>]` | Stop then start. Useful with `run=` to switch and restart in one step.                                                                    |
+| `make infos [run=<folder>]`   | Full report: state, heights, sizes, cluster config, genesis info, node identities, P2P/RPC endpoints.                                     |
+| `make status [watch=<sec>]`   | Per-node heights, peer counts, reachability. `watch=<sec>` refreshes every N seconds.                                                     |
+| `make logs svc=<service>`     | Follow logs for a service (e.g. `node-1`, `sentinel-1`, `watchtower`, `grafana`).                                                         |
 
 **Cleanup** — free disk and Docker resources:
 
-| Target | Description |
-| ------ | ----------- |
-| `make clean-imgs [yes=1]` | Remove all `gno-cluster-*` Docker images. Prompts unless `yes=1`. |
+| Target                    | Description                                                                                                          |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `make clean-imgs [yes=1]` | Remove all `gno-cluster-*` Docker images. Prompts unless `yes=1`.                                                    |
 | `make clean-runs [yes=1]` | Remove all run folders. Prompts unless `yes=1`; refuses in non-TTY without `yes=1`. Stops any running cluster first. |
-| `make clean [yes=1]` | `clean-runs` then `clean-imgs`. |
+| `make clean [yes=1]`      | `clean-runs` then `clean-imgs`.                                                                                      |
 
 `make build [force=1]` is called internally by `create` and `update`. It skips targets whose content-addressed tag already exists; `force=1` rebuilds unconditionally.
 
@@ -153,17 +153,17 @@ Run `make help` for the full list. Targets fall into three groups:
 
 Copy `cluster.env.example` to `cluster.env`. All settings have sensible defaults.
 
-| Variable                | Default                | Description                                         |
-| ----------------------- | ---------------------- | --------------------------------------------------- |
-| `GNO_VERSION`           | `master`               | Git ref (branch, tag, or commit) for gno            |
-| `GNO_REPO`              | `gnolang/gno`          | GitHub repo for gno (`owner/repo`)                  |
-| `WATCHTOWER_VERSION`    | `main`                 | Git ref for watchtower/sentinel                     |
-| `WATCHTOWER_REPO`       | `aeddi/gno-watchtower` | GitHub repo for watchtower/sentinel                 |
-| `NUM_NODES`             | `4`                    | Number of nodes in the cluster                      |
+| Variable                | Default                | Description                                                                              |
+| ----------------------- | ---------------------- | ---------------------------------------------------------------------------------------- |
+| `GNO_VERSION`           | `master`               | Git ref (branch, tag, or commit) for gno                                                 |
+| `GNO_REPO`              | `gnolang/gno`          | GitHub repo for gno (`owner/repo`)                                                       |
+| `WATCHTOWER_VERSION`    | `main`                 | Git ref for watchtower/sentinel                                                          |
+| `WATCHTOWER_REPO`       | `aeddi/gno-watchtower` | GitHub repo for watchtower/sentinel                                                      |
+| `NUM_NODES`             | `4`                    | Number of nodes in the cluster                                                           |
 | `TOPOLOGY`              | `mesh`                 | Network topology — `mesh`, `star`, or `ring`. See [Network topology](#network-topology). |
-| `GNOLAND_RPC_PORT_BASE` | `26657`                | Host RPC port for node-1 (increments per node)      |
-| `GNOLAND_P2P_PORT_BASE` | `26670`                | Host P2P port for node-1 (increments per node)      |
-| `GRAFANA_PORT`          | `3000`                 | Host port for the Grafana UI                        |
+| `GNOLAND_RPC_PORT_BASE` | `26657`                | Host RPC port for node-1 (increments per node)                                           |
+| `GNOLAND_P2P_PORT_BASE` | `26670`                | Host P2P port for node-1 (increments per node)                                           |
+| `GRAFANA_PORT`          | `3000`                 | Host port for the Grafana UI                                                             |
 
 At `make create` time, `cluster.env` is copied into the run folder and becomes the run's own pinned config. Editing the project-root `cluster.env` later affects future `make create` invocations, not existing runs — use `make update` to apply version bumps to an existing run.
 

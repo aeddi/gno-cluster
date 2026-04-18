@@ -16,7 +16,7 @@ mock_config_set() { RECORDED+=("$1=$2"); }
 # ---- Global section applies to all nodes
 echo "-- global section --"
 TMP=$(mktemp)
-cat > "$TMP" <<'EOF'
+cat >"$TMP" <<'EOF'
 consensus.timeout_commit = "3s"
 mempool.size = 10000
 EOF
@@ -30,7 +30,7 @@ rm -f "$TMP"
 # ---- Targeted section: matching node
 echo "-- targeted section (match) --"
 TMP=$(mktemp)
-cat > "$TMP" <<'EOF'
+cat >"$TMP" <<'EOF'
 consensus.timeout_commit = "3s"
 
 [node-1]
@@ -49,7 +49,7 @@ rm -f "$TMP"
 # ---- Targeted section: non-matching node
 echo "-- targeted section (no match) --"
 TMP=$(mktemp)
-cat > "$TMP" <<'EOF'
+cat >"$TMP" <<'EOF'
 [node-2]
 mempool.size = 5000
 EOF
@@ -61,7 +61,7 @@ rm -f "$TMP"
 # ---- Multi-target section
 echo "-- multi-target section --"
 TMP=$(mktemp)
-cat > "$TMP" <<'EOF'
+cat >"$TMP" <<'EOF'
 [node-1, node-3]
 mempool.size = 7000
 EOF
@@ -74,7 +74,7 @@ rm -f "$TMP"
 # ---- Comments and blank lines
 echo "-- comments and blanks --"
 TMP=$(mktemp)
-cat > "$TMP" <<'EOF'
+cat >"$TMP" <<'EOF'
 # This is a comment
 consensus.timeout_commit = "3s"
 
@@ -89,7 +89,7 @@ rm -f "$TMP"
 # ---- Last-match wins
 echo "-- last-match wins --"
 TMP=$(mktemp)
-cat > "$TMP" <<'EOF'
+cat >"$TMP" <<'EOF'
 consensus.timeout_commit = "3s"
 
 [node-1]

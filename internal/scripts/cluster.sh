@@ -941,7 +941,10 @@ _last_block_height() {
     [[ "$h" =~ ^[0-9]+$ ]] || h=0
     if ((h > max)); then max=$h; fi
   done
-  if ((max < 0)); then echo "-"; return; fi
+  if ((max < 0)); then
+    echo "-"
+    return
+  fi
   echo "$max"
 }
 

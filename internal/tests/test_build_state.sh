@@ -9,9 +9,9 @@ source "$SCRIPT_DIR/helpers.sh"
 PROJECT_ROOT=$(mktemp -d)
 trap 'rm -rf "$PROJECT_ROOT"' EXIT
 mkdir -p "$PROJECT_ROOT/internal/docker" "$PROJECT_ROOT/internal/scripts"
-echo "FROM alpine:3" > "$PROJECT_ROOT/internal/Dockerfile"
-echo "#!/bin/sh" > "$PROJECT_ROOT/internal/docker/gnoland-entrypoint.sh"
-echo "#!/bin/sh" > "$PROJECT_ROOT/internal/scripts/parse-overrides.sh"
+echo "FROM alpine:3" >"$PROJECT_ROOT/internal/Dockerfile"
+echo "#!/bin/sh" >"$PROJECT_ROOT/internal/docker/gnoland-entrypoint.sh"
+echo "#!/bin/sh" >"$PROJECT_ROOT/internal/scripts/parse-overrides.sh"
 export PROJECT_ROOT
 
 source "$SCRIPT_DIR/../scripts/build-state.sh"
@@ -76,9 +76,9 @@ PREV_WATCHTOWER_COMMIT="$WATCHTOWER_COMMIT"
 PREV_CONTENT_HASH=$(compute_build_hash)
 PREV_CONTENT_FILES=()
 while IFS= read -r l; do PREV_CONTENT_FILES+=("$l"); done < <(compute_file_hashes_for \
-    "internal/Dockerfile" \
-    "internal/docker" \
-    "internal/scripts/parse-overrides.sh")
+  "internal/Dockerfile" \
+  "internal/docker" \
+  "internal/scripts/parse-overrides.sh")
 
 set +e
 summary=$(build_state_drift_summary)
@@ -88,7 +88,7 @@ assert_eq "no drift returns 0" "0" "$code"
 assert_eq "no drift prints nothing" "" "$summary"
 
 # ---- Drift: gno commit changed (same repo, same ref)
-PREV_GNO_COMMIT="0000000000000000000000000000000000"  # different
+PREV_GNO_COMMIT="0000000000000000000000000000000000" # different
 set +e
 summary=$(build_state_drift_summary 2>&1)
 code=$?
@@ -96,8 +96,8 @@ set -e
 assert_eq "commit drift returns 1" "1" "$code"
 # The summary should mention gno and the two commit short hashes.
 case "$summary" in
-    *"gno"*"000000000000"*"26dc377ab634"*) ok=1 ;;
-    *) ok=0 ;;
+*"gno"*"000000000000"*"26dc377ab634"*) ok=1 ;;
+*) ok=0 ;;
 esac
 assert_eq "commit drift summary mentions both SHAs" "1" "$ok"
 
@@ -110,8 +110,8 @@ code=$?
 set -e
 assert_eq "ref drift returns 1" "1" "$code"
 case "$summary" in
-    *"v0.1.0"*"master"*) ok=1 ;;
-    *) ok=0 ;;
+*"v0.1.0"*"master"*) ok=1 ;;
+*) ok=0 ;;
 esac
 assert_eq "ref drift summary mentions old and new ref" "1" "$ok"
 
@@ -124,8 +124,8 @@ code=$?
 set -e
 assert_eq "repo drift returns 1" "1" "$code"
 case "$summary" in
-    *"some-fork/gno"*"gnolang/gno"*) ok=1 ;;
-    *) ok=0 ;;
+*"some-fork/gno"*"gnolang/gno"*) ok=1 ;;
+*) ok=0 ;;
 esac
 assert_eq "repo drift summary mentions old and new repo" "1" "$ok"
 
@@ -138,8 +138,8 @@ code=$?
 set -e
 assert_eq "content drift returns 1" "1" "$code"
 case "$summary" in
-    *[Cc]"ontent"*) ok=1 ;;
-    *) ok=0 ;;
+*[Cc]"ontent"*) ok=1 ;;
+*) ok=0 ;;
 esac
 assert_eq "content drift summary mentions content" "1" "$ok"
 
