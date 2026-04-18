@@ -8,6 +8,7 @@ Every `make create` produces a self-contained **run folder** under `runs/` (time
 
 - Docker + Docker Compose v2
 - `bash`, `make`
+- `git` — required to resolve `GNO_VERSION`/`WATCHTOWER_VERSION` refs to commits
 - `jq` — required for genesis parsing and `make infos`
 - `curl` or `wget` — required for `make status`; used for the optional GitHub compare on drift
 - `sha256sum` (Linux) or `shasum` (macOS) — either works
@@ -130,6 +131,7 @@ Run `make help` for the full list. Targets fall into three groups:
 
 | Target | Description |
 | ------ | ----------- |
+| `make list` | List all runs with state, config, heights, and on-disk sizes. |
 | `make start [run=<folder>]` | Start a run. `run=` switches `runs/current` to a past run. Won't rebuild a pinned run — surfaces drift instead and suggests update/clone. |
 | `make stop` | Stop the current run. Data stays on disk in the run folder. |
 | `make restart [run=<folder>]` | Stop then start. Useful with `run=` to switch and restart in one step. |
