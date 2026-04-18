@@ -928,14 +928,19 @@ _dir_size() {
   fi
 }
 
-# Reads the height from priv_validator_state.json, or "-" if unavailable.
+# Returns the highest signed block height across all validator state files in a
+# run, or "-" if none exist. Any validator's max height = effective chain height.
 _last_block_height() {
-  local f="$1"
-  [[ -f "$f" ]] || {
-    echo "-"
-    return
-  }
-  jq -r '.height // "-"' "$f" 2>/dev/null || echo "-"
+  local run_dir="$1"
+  local max=-1 h f
+  for f in "${run_dir}"/gnoland-data-*/secrets/priv_validator_state.json; do
+    [[ -f "$f" ]] || continue
+    h=$(jq -r '.height // 0' "$f" 2>/dev/null || echo 0)
+    [[ "$h" =~ ^[0-9]+$ ]] || h=0
+    if ((h > max)); then max=$h; fi
+  done
+  if ((max < 0)); then echo "-"; return; fi
+  echo "$max"
 }
 
 # Total size of all per-node gnoland data directories under a run, or "-" when
@@ -973,14 +978,14 @@ _infos_header() {
   else
     state=$(_color 31 "stopped")
   fi
-  height=$(_last_block_height "${run_dir}/gnoland-data-1/secrets/priv_validator_state.json")
+  height=$(_last_block_height "$run_dir")
   loki_sz=$(_dir_size "${run_dir}/loki-data")
   vm_sz=$(_dir_size "${run_dir}/victoria-data")
 
   echo "==> Run: ${name}"
   printf "    Created:          %s\n" "$date_str"
   printf "    State:            %b\n" "$state"
-  printf "    Height (node-1):  %s\n" "$height"
+  printf "    Height:           %s\n" "$height"
   printf "    Loki data:        %s\n" "$loki_sz"
   printf "    VictoriaMetrics:  %s\n" "$vm_sz"
 }
@@ -1158,7 +1163,7 @@ cmd_list() {
     fi
     nodes=$(_run_env_get "$run" NUM_NODES)
     topology=$(_run_env_get "$run" TOPOLOGY)
-    height=$(_last_block_height "${run}/gnoland-data-1/secrets/priv_validator_state.json")
+    height=$(_last_block_height "$run")
     gno_sz=$(_gnoland_data_size "$run")
     loki_sz=$(_dir_size "${run}/loki-data")
     vm_sz=$(_dir_size "${run}/victoria-data")
@@ -1168,7 +1173,7 @@ cmd_list() {
     printf "%s%b\n" "$name" "$marker"
     printf "    State:    %b\n" "$state_label"
     printf "    Config:   %s nodes, %s topology\n" "$nodes" "$topology"
-    printf "    Height:   %s  (node-1)\n" "$height"
+    printf "    Height:   %s\n" "$height"
     printf "    Sizes:    gnoland %s, loki %s, victoria %s  (run total %s)\n" \
       "$gno_sz" "$loki_sz" "$vm_sz" "$total_sz"
     echo ""

@@ -22,7 +22,10 @@ FILTERED=$(mktemp)
 # cluster.sh sources sibling modules by path and cd's to PROJECT_ROOT. Mirror
 # the layout in a temp dir so those source lines succeed.
 PROJECT_ROOT_TMP=$(mktemp -d)
-trap 'rm -rf "$PROJECT_ROOT_TMP" "$FILTERED"' EXIT
+FAKE_HEIGHT_RUN=""
+EMPTY_RUN=""
+_cleanup() { rm -rf "$PROJECT_ROOT_TMP" "$FILTERED" "${FAKE_HEIGHT_RUN:-}" "${EMPTY_RUN:-}"; }
+trap _cleanup EXIT
 mkdir -p "$PROJECT_ROOT_TMP/internal/scripts"
 # Sanity check: `*.sh` glob must match at least one file.
 shopt -s nullglob
@@ -106,5 +109,32 @@ code=$?
 set -e
 assert_eq "missing run returns 1" "1" "$code"
 assert_contains "missing run error mentions name" "nonexistent-run" "$err"
+
+# ---- _last_block_height
+echo "-- _last_block_height --"
+
+# Build a fake run dir with two nodes at different heights.
+FAKE_HEIGHT_RUN=$(mktemp -d)
+
+mkdir -p "${FAKE_HEIGHT_RUN}/gnoland-data-1/secrets"
+mkdir -p "${FAKE_HEIGHT_RUN}/gnoland-data-2/secrets"
+printf '{"height": "0",  "round": "0", "step": 0}\n' \
+    > "${FAKE_HEIGHT_RUN}/gnoland-data-1/secrets/priv_validator_state.json"
+printf '{"height": "500","round": "0", "step": 0}\n' \
+    > "${FAKE_HEIGHT_RUN}/gnoland-data-2/secrets/priv_validator_state.json"
+
+result=$(_last_block_height "$FAKE_HEIGHT_RUN")
+assert_eq "returns max height across nodes" "500" "$result"
+
+# Node-1 advances; node-2 stays — max should follow.
+printf '{"height": "999","round": "0", "step": 0}\n' \
+    > "${FAKE_HEIGHT_RUN}/gnoland-data-1/secrets/priv_validator_state.json"
+result=$(_last_block_height "$FAKE_HEIGHT_RUN")
+assert_eq "returns new max when node-1 advances" "999" "$result"
+
+# Run dir with no state files returns "-".
+EMPTY_RUN=$(mktemp -d)
+result=$(_last_block_height "$EMPTY_RUN")
+assert_eq "empty run dir returns -" "-" "$result"
 
 summary
