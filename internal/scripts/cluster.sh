@@ -7,7 +7,8 @@
 #
 # Expects environment variables (set by Makefile or cluster.env):
 #   PROJECT_ROOT, GNO_VERSION, GNO_REPO, WATCHTOWER_VERSION, WATCHTOWER_REPO,
-#   NUM_NODES, TOPOLOGY, GNOLAND_RPC_PORT_BASE, GNOLAND_P2P_PORT_BASE, GRAFANA_PORT
+#   NUM_NODES, TOPOLOGY, GNOLAND_RPC_PORT_BASE, GNOLAND_P2P_PORT_BASE, GRAFANA_PORT,
+#   VICTORIA_METRICS_PORT, LOKI_PORT
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -585,7 +586,8 @@ cmd_create() {
   bash "${SCRIPT_DIR}/create-run.sh" \
     "$PROJECT_ROOT" "$GNO_REPO" "$GNO_VERSION" \
     "$NUM_NODES" "$TOPOLOGY" \
-    "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$GRAFANA_PORT"
+    "$GNOLAND_RPC_PORT_BASE" "$GNOLAND_P2P_PORT_BASE" "$GRAFANA_PORT" \
+    "$VICTORIA_METRICS_PORT" "$LOKI_PORT"
 
   # Pin this run's build state so future make start invocations can detect drift.
   local new_run

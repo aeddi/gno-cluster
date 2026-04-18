@@ -2,7 +2,8 @@
 # internal/scripts/create-run.sh — Create a fresh run folder and start the cluster.
 #
 # Usage: create-run.sh <project_root> <gno_repo> <gno_version> <num_nodes> \
-#            <topology> <rpc_port_base> <p2p_port_base> <grafana_port>
+#            <topology> <rpc_port_base> <p2p_port_base> <grafana_port> \
+#            <victoria_metrics_port> <loki_port>
 set -euo pipefail
 
 PROJECT_ROOT="$1"
@@ -13,6 +14,8 @@ TOPOLOGY="$5"
 RPC_PORT_BASE="$6"
 P2P_PORT_BASE="$7"
 GRAFANA_PORT="$8"
+VICTORIA_METRICS_PORT="$9"
+LOKI_PORT="${10}"
 
 SCRIPTS_DIR="${PROJECT_ROOT}/internal/scripts"
 TEMPLATES_DIR="${PROJECT_ROOT}/internal/templates"
@@ -91,6 +94,7 @@ echo "==> Generating docker-compose.yml..."
 bash "${SCRIPTS_DIR}/generate-compose.sh" \
     "$RUN_DIR" "$NUM_NODES" "$TOPOLOGY" \
     "$RPC_PORT_BASE" "$P2P_PORT_BASE" "$GRAFANA_PORT" \
+    "$VICTORIA_METRICS_PORT" "$LOKI_PORT" \
     "$TEMPLATES_DIR" "$SECRETS_DIR"
 
 # ---- Update current symlink

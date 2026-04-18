@@ -2,7 +2,8 @@
 # internal/scripts/generate-compose.sh — Generate docker-compose.yml from templates.
 #
 # Usage: generate-compose.sh <run_dir> <num_nodes> <topology> <rpc_port_base> \
-#            <p2p_port_base> <grafana_port> <templates_dir> <secrets_dir>
+#            <p2p_port_base> <grafana_port> <victoria_metrics_port> <loki_port> \
+#            <templates_dir> <secrets_dir>
 #
 # Reads node IDs from <secrets_dir>/node-N/node_id to build peer addresses.
 # Sources topology.sh for network computation.
@@ -18,8 +19,10 @@ TOPOLOGY="$3"
 RPC_PORT_BASE="$4"
 P2P_PORT_BASE="$5"
 GRAFANA_PORT="$6"
-TEMPLATES_DIR="$7"
-SECRETS_DIR="$8"
+VICTORIA_METRICS_PORT="$7"
+LOKI_PORT="$8"
+TEMPLATES_DIR="$9"
+SECRETS_DIR="${10}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/topology.sh"
@@ -74,7 +77,9 @@ replace_placeholder() {
 }
 
 # ---- Header (shared services)
-sed "s/__GRAFANA_PORT__/${GRAFANA_PORT}/g" \
+sed -e "s/__GRAFANA_PORT__/${GRAFANA_PORT}/g" \
+    -e "s/__VICTORIA_METRICS_PORT__/${VICTORIA_METRICS_PORT}/g" \
+    -e "s/__LOKI_PORT__/${LOKI_PORT}/g" \
     "${TEMPLATES_DIR}/docker-compose-header.yml.tmpl" > "$COMPOSE_FILE"
 
 # ---- Per-node services
