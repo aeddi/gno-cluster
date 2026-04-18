@@ -34,8 +34,11 @@ _gno_cluster_make() {
         fi
 
         if (( match )); then
+            # Iterate everything after the `make` command itself. zsh's words
+            # is 1-indexed so words[1] is "make"; we want from index 2 onward,
+            # which ${words[@]:1} gives (zsh's :N is a 0-based skip, like bash).
             local w cmd_found=0
-            for w in "${words[@]:2}"; do
+            for w in "${words[@]:1}"; do
                 case "$w" in
                     start|update|clone|infos|restart) cmd_found=1; break ;;
                 esac
