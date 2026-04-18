@@ -16,7 +16,7 @@ GRAFANA_PORT="$8"
 
 SCRIPTS_DIR="${PROJECT_ROOT}/internal/scripts"
 TEMPLATES_DIR="${PROJECT_ROOT}/internal/templates"
-SECRETS_DIR="${PROJECT_ROOT}/secrets"
+SECRETS_DIR="${PROJECT_ROOT}/internal/secrets"
 
 source "${SCRIPTS_DIR}/parse-genesis.sh"
 
@@ -58,7 +58,7 @@ for i in $(seq 1 "$NUM_NODES"); do
     mkdir -p "${NODE_DATA}/secrets"
 
     if [[ ! -d "${SECRETS_DIR}/node-${i}" ]]; then
-        echo "Error: secrets/node-${i} not found. Run 'make init' first." >&2
+        echo "Error: internal/secrets/node-${i} not found. Run 'make create' first." >&2
         exit 1
     fi
 

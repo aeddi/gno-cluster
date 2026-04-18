@@ -1,5 +1,5 @@
 runs/
-secrets/
+internal/secrets/
 internal/tests/
 docs/
 .git/

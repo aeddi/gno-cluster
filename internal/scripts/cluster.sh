@@ -14,9 +14,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CURRENT_LINK="${PROJECT_ROOT}/runs/current"
 GNOLAND_IMAGE="gno-cluster-gnoland:latest"
 
-# Operate from the project root so CWD-relative paths (secrets/, internal/,
-# docker build context ".", etc.) resolve correctly regardless of whether
-# make was invoked from the project dir, via `make -C`, or via `make -f`.
+# Operate from the project root so CWD-relative paths (internal/secrets/,
+# internal/, docker build context ".", etc.) resolve correctly regardless of
+# whether make was invoked from the project dir, via `make -C`, or via `make -f`.
 cd "${PROJECT_ROOT:?PROJECT_ROOT is not set; invoke cluster.sh via make}"
 
 # shellcheck source=image-tags.sh
@@ -139,14 +139,14 @@ is_running() {
 get_node_info() {
     local idx="$1"
     _addr=$(gnoland_run \
-        -v "${PROJECT_ROOT}/secrets/node-${idx}:/gnoland-data" \
+        -v "${PROJECT_ROOT}/internal/secrets/node-${idx}:/gnoland-data" \
         "$GNOLAND_IMAGE" \
         secrets get validator_key.address -raw --data-dir /gnoland-data 2>/dev/null)
     _pubkey=$(gnoland_run \
-        -v "${PROJECT_ROOT}/secrets/node-${idx}:/gnoland-data" \
+        -v "${PROJECT_ROOT}/internal/secrets/node-${idx}:/gnoland-data" \
         "$GNOLAND_IMAGE" \
         secrets get validator_key.pub_key -raw --data-dir /gnoland-data 2>/dev/null)
-    _node_id=$(cat "secrets/node-${idx}/node_id" 2>/dev/null || echo "unknown")
+    _node_id=$(cat "internal/secrets/node-${idx}/node_id" 2>/dev/null || echo "unknown")
 }
 
 validate_port_ranges() {
@@ -309,25 +309,25 @@ ensure_images_for_run() {
 # Ensures secrets exist for nodes 1..NUM_NODES. Skips existing, creates missing.
 _ensure_node_secrets() {
     echo "==> Ensuring secrets for ${NUM_NODES} nodes..."
-    mkdir -p secrets
+    mkdir -p internal/secrets
 
     local i node_id
     for i in $(seq 1 "$NUM_NODES"); do
-        if [[ -d "secrets/node-${i}" ]]; then
+        if [[ -d "internal/secrets/node-${i}" ]]; then
             echo "  node-${i}: skipping, already exists"
             continue
         fi
         echo "  node-${i}: creating..."
-        mkdir -p "secrets/node-${i}"
+        mkdir -p "internal/secrets/node-${i}"
         gnoland_run \
-            -v "${PROJECT_ROOT}/secrets/node-${i}:/gnoland-data" \
+            -v "${PROJECT_ROOT}/internal/secrets/node-${i}:/gnoland-data" \
             "$GNOLAND_IMAGE" \
             secrets init --data-dir /gnoland-data
         node_id=$(gnoland_run \
-            -v "${PROJECT_ROOT}/secrets/node-${i}:/gnoland-data" \
+            -v "${PROJECT_ROOT}/internal/secrets/node-${i}:/gnoland-data" \
             "$GNOLAND_IMAGE" \
             secrets get node_id.id -raw --data-dir /gnoland-data 2>/dev/null)
-        echo "$node_id" > "secrets/node-${i}/node_id"
+        echo "$node_id" > "internal/secrets/node-${i}/node_id"
     done
 }
 
@@ -364,7 +364,7 @@ _print_genesis_info() {
     # `secrets get -raw` (bech32 gpub...) and genesis.pub_key.value (base64).
     local our_addrs=() our_nodes=() i
     for i in $(seq 1 "$NUM_NODES"); do
-        [[ -d "secrets/node-${i}" ]] || continue
+        [[ -d "internal/secrets/node-${i}" ]] || continue
         get_node_info "$i"
         our_addrs+=("$_addr")
         our_nodes+=("node-${i}")
@@ -892,7 +892,7 @@ _infos_node_network() {
     for i in $(seq 1 "$NUM_NODES"); do
         rpc_port=$((GNOLAND_RPC_PORT_BASE + i - 1))
         p2p_port=$((GNOLAND_P2P_PORT_BASE + i - 1))
-        node_id=$(cat "secrets/node-${i}/node_id" 2>/dev/null || echo "?")
+        node_id=$(cat "internal/secrets/node-${i}/node_id" 2>/dev/null || echo "?")
         printf "    %-8s  %-70s  http://localhost:%s\n" \
             "node-${i}" "${node_id}@localhost:${p2p_port}" "$rpc_port"
     done
@@ -981,8 +981,8 @@ cmd_infos() {
         source "${run_dir}/cluster.env"
     fi
 
-    if [[ ! -d secrets ]]; then
-        echo "Error: secrets/ not found. Run 'make create' first."
+    if [[ ! -d internal/secrets ]]; then
+        echo "Error: internal/secrets/ not found. Run 'make create' first."
         exit 1
     fi
 
