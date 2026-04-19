@@ -18,10 +18,57 @@ services:
     image: victoriametrics/victoria-metrics:v1.115.0
     container_name: victoria-metrics
     restart: unless-stopped
+    # -promscrape.config makes VM scrape node-exporter + cadvisor for infra metrics.
+    command:
+      - "-storageDataPath=/victoria-metrics-data"
+      - "-promscrape.config=/etc/vm/scrape.yml"
     volumes:
       - ./victoria-data:/victoria-metrics-data
+      - ./scrape.yml:/etc/vm/scrape.yml:ro
     ports:
       - "127.0.0.1:__VICTORIA_METRICS_PORT__:8428"
+    networks:
+      - watchtower-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "2"
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: node-exporter
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+      - "--no-collector.wifi"
+      - "--no-collector.hwmon"
+      - "--no-collector.ipvs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
+    pid: host
+    volumes:
+      - "/:/host:ro,rslave"
+    networks:
+      - watchtower-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "2"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
     networks:
       - watchtower-net
     logging:

@@ -85,6 +85,7 @@ WT_EXTRACT_DIR="${RUN_DIR}/.wt-extracted"
 bash "${SCRIPTS_DIR}/extract-configs.sh" "$WT_EXTRACT_DIR"
 
 cp "${WT_EXTRACT_DIR}/deploy/loki/loki-config.yml" "${RUN_DIR}/loki-config.yml"
+cp "${WT_EXTRACT_DIR}/deploy/victoria-metrics/scrape.yml" "${RUN_DIR}/scrape.yml"
 mkdir -p "${RUN_DIR}/grafana-provisioning"
 cp -r "${WT_EXTRACT_DIR}/deploy/grafana/datasources" "${RUN_DIR}/grafana-provisioning/datasources"
 cp -r "${WT_EXTRACT_DIR}/deploy/grafana/dashboards" "${RUN_DIR}/grafana-provisioning/dashboards"
