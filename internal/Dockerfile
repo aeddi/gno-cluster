@@ -96,8 +96,10 @@ COPY --from=watchtower-builder /build/sentinel /usr/local/bin/sentinel
 ENTRYPOINT ["sentinel"]
 
 # ---- Config Export
-# Exposes watchtower's deploy/ tree so gno-cluster can extract loki, grafana,
-# and other shared configs at run-creation time instead of duplicating them.
+# Exposes watchtower's deploy/ tree and the default sentinel/watchtower configs
+# (produced by `generate-config`) so gno-cluster can extract them at run-creation
+# time instead of duplicating them. /export/defaults/ files are the schema-current
+# TOML defaults; gno-cluster layers cluster-specific overrides on top via sed.
 FROM alpine:3 AS config-export
 
 ARG WATCHTOWER_COMMIT_HASH
@@ -108,4 +110,14 @@ LABEL watchtower.commit="${WATCHTOWER_COMMIT_HASH}" \
   watchtower.version="${WATCHTOWER_VERSION}" \
   watchtower.repo="${WATCHTOWER_REPO}"
 
-COPY --from=watchtower-builder /src/deploy /export
+# gcompat/libgcc are needed for the glibc-linked binaries from the Debian builder.
+RUN apk add --no-cache gcompat libgcc
+
+COPY --from=watchtower-builder /src/deploy         /export/deploy
+COPY --from=watchtower-builder /build/sentinel    /tmp/sentinel
+COPY --from=watchtower-builder /build/watchtower  /tmp/watchtower
+
+RUN mkdir -p /export/defaults \
+  && /tmp/sentinel   generate-config /export/defaults/sentinel.toml \
+  && /tmp/watchtower generate-config /export/defaults/watchtower.toml \
+  && rm -f /tmp/sentinel /tmp/watchtower

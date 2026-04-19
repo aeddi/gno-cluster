@@ -84,18 +84,20 @@ echo "  Extracting watchtower configs..."
 WT_EXTRACT_DIR="${RUN_DIR}/.wt-extracted"
 bash "${SCRIPTS_DIR}/extract-configs.sh" "$WT_EXTRACT_DIR"
 
-cp "${WT_EXTRACT_DIR}/loki/loki-config.yml" "${RUN_DIR}/loki-config.yml"
+cp "${WT_EXTRACT_DIR}/deploy/loki/loki-config.yml" "${RUN_DIR}/loki-config.yml"
 mkdir -p "${RUN_DIR}/grafana-provisioning"
-cp -r "${WT_EXTRACT_DIR}/grafana/datasources" "${RUN_DIR}/grafana-provisioning/datasources"
-cp -r "${WT_EXTRACT_DIR}/grafana/dashboards" "${RUN_DIR}/grafana-provisioning/dashboards"
-rm -rf "$WT_EXTRACT_DIR"
+cp -r "${WT_EXTRACT_DIR}/deploy/grafana/datasources" "${RUN_DIR}/grafana-provisioning/datasources"
+cp -r "${WT_EXTRACT_DIR}/deploy/grafana/dashboards" "${RUN_DIR}/grafana-provisioning/dashboards"
 
 # ---- Create empty data dirs
 mkdir -p "${RUN_DIR}/victoria-data" "${RUN_DIR}/loki-data" "${RUN_DIR}/grafana-data"
 
-# ---- Generate watchtower + sentinel configs
+# ---- Generate watchtower + sentinel configs from watchtower defaults + cluster overlay
 echo "==> Generating configs..."
-bash "${SCRIPTS_DIR}/generate-configs.sh" "$RUN_DIR" "$NUM_NODES" "$TEMPLATES_DIR"
+bash "${SCRIPTS_DIR}/generate-configs.sh" "$RUN_DIR" "$NUM_NODES" "$WT_EXTRACT_DIR"
+
+# Extract dir has served its purpose now.
+rm -rf "$WT_EXTRACT_DIR"
 
 # ---- Generate docker-compose.yml
 echo "==> Generating docker-compose.yml..."
