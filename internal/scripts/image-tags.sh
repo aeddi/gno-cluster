@@ -70,7 +70,7 @@ compute_image_tag() {
   local commit
   case "$target" in
   gnoland) commit="$gno_commit" ;;
-  watchtower | sentinel) commit="$wt_commit" ;;
+  watchtower | sentinel | config-export) commit="$wt_commit" ;;
   *)
     echo "Error: unknown target '$target'" >&2
     return 1

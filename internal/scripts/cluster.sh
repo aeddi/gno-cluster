@@ -288,10 +288,11 @@ cmd_build() {
   local build_date
   build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-  local gnoland_tag watchtower_tag sentinel_tag
+  local gnoland_tag watchtower_tag sentinel_tag config_export_tag
   gnoland_tag=$(compute_image_tag gnoland "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
   watchtower_tag=$(compute_image_tag watchtower "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
   sentinel_tag=$(compute_image_tag sentinel "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
+  config_export_tag=$(compute_image_tag config-export "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
 
   echo "  gno:        ${GNO_REPO}@${GNO_VERSION} -> ${GNO_COMMIT:0:12}"
   echo "  watchtower: ${WATCHTOWER_REPO}@${WATCHTOWER_VERSION} -> ${WATCHTOWER_COMMIT:0:12}"
@@ -314,6 +315,11 @@ cmd_build() {
     --build-arg "WATCHTOWER_COMMIT_HASH=${WATCHTOWER_COMMIT}" \
     --build-arg "WATCHTOWER_VERSION=${WATCHTOWER_VERSION}" \
     --build-arg "BUILD_DATE=${build_date}"
+
+  _build_image config-export "$config_export_tag" "$force" \
+    --build-arg "WATCHTOWER_REPO=${WATCHTOWER_REPO}" \
+    --build-arg "WATCHTOWER_COMMIT_HASH=${WATCHTOWER_COMMIT}" \
+    --build-arg "WATCHTOWER_VERSION=${WATCHTOWER_VERSION}"
 
   echo "==> Build complete."
 }

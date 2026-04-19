@@ -77,10 +77,18 @@ for i in $(seq 1 "$NUM_NODES"); do
   echo "    Prepared gnoland-data-${i}"
 done
 
-# ---- Copy static configs
-echo "  Copying static configs..."
-cp "${PROJECT_ROOT}/internal/docker/loki-config.yml" "${RUN_DIR}/loki-config.yml"
-cp -r "${PROJECT_ROOT}/internal/docker/grafana/provisioning" "${RUN_DIR}/grafana-provisioning"
+# ---- Extract watchtower deploy/ configs (loki, grafana) into the run
+# Single source of truth: gno-watchtower's deploy/ tree, baked into the
+# config-export image at build time. See internal/scripts/extract-configs.sh.
+echo "  Extracting watchtower configs..."
+WT_EXTRACT_DIR="${RUN_DIR}/.wt-extracted"
+bash "${SCRIPTS_DIR}/extract-configs.sh" "$WT_EXTRACT_DIR"
+
+cp "${WT_EXTRACT_DIR}/loki/loki-config.yml" "${RUN_DIR}/loki-config.yml"
+mkdir -p "${RUN_DIR}/grafana-provisioning"
+cp -r "${WT_EXTRACT_DIR}/grafana/datasources" "${RUN_DIR}/grafana-provisioning/datasources"
+cp -r "${WT_EXTRACT_DIR}/grafana/dashboards" "${RUN_DIR}/grafana-provisioning/dashboards"
+rm -rf "$WT_EXTRACT_DIR"
 
 # ---- Create empty data dirs
 mkdir -p "${RUN_DIR}/victoria-data" "${RUN_DIR}/loki-data" "${RUN_DIR}/grafana-data"

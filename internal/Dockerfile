@@ -94,3 +94,18 @@ RUN apk add --no-cache ca-certificates docker-cli gcompat libgcc
 COPY --from=watchtower-builder /build/sentinel /usr/local/bin/sentinel
 
 ENTRYPOINT ["sentinel"]
+
+# ---- Config Export
+# Exposes watchtower's deploy/ tree so gno-cluster can extract loki, grafana,
+# and other shared configs at run-creation time instead of duplicating them.
+FROM alpine:3 AS config-export
+
+ARG WATCHTOWER_COMMIT_HASH
+ARG WATCHTOWER_VERSION
+ARG WATCHTOWER_REPO
+
+LABEL watchtower.commit="${WATCHTOWER_COMMIT_HASH}" \
+  watchtower.version="${WATCHTOWER_VERSION}" \
+  watchtower.repo="${WATCHTOWER_REPO}"
+
+COPY --from=watchtower-builder /src/deploy /export
