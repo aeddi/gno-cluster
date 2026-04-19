@@ -11,9 +11,10 @@ rpc_url       = "http://node-__N__:26657"
 enabled        = true
 source         = "docker"
 container_name = "node-__N__"
-batch_size     = "1MB"
-batch_timeout  = "5s"
-min_level      = "debug"
+batch_size      = "1MB"
+batch_timeout   = "5s"
+min_level       = "debug"
+resume_lookback = "60s"
 
 [otlp]
 enabled     = true
