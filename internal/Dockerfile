@@ -14,7 +14,18 @@ RUN apk add --no-cache git
 WORKDIR /src
 RUN git clone "https://github.com/${GNO_REPO}.git" . \
   && git checkout "${GNO_COMMIT_HASH:-${GNO_VERSION}}"
-RUN cd gno.land && go build -o /build/gnoland ./cmd/gnoland
+
+# Compute build version the same way as gnoland's upstream Dockerfile
+# (gnolang/gno@391938e8): prefer an exact tag, fall back to
+# "<branch>.<commit-count>+<short-sha>". Written to /build_version so every
+# build target below can bake it into the binary via -ldflags.
+RUN { git describe --tags --exact-match 2>/dev/null \
+      || echo "$(git rev-parse --abbrev-ref HEAD).$(git rev-list --count HEAD)+$(git rev-parse --short HEAD)"; \
+    } > /build_version
+
+RUN cd gno.land && go build \
+  -ldflags "-w -s -X github.com/gnolang/gno/tm2/pkg/version.Version=$(cat /build_version)" \
+  -o /build/gnoland ./cmd/gnoland
 
 # ---- Gnoland
 FROM alpine:3 AS gnoland
