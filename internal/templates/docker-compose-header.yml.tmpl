@@ -5,6 +5,13 @@ services:
     restart: unless-stopped
     volumes:
       - ./watchtower.toml:/config.toml:ro
+    # Retention values match Loki (LOGS_RETENTION below) and VM
+    # (-retentionPeriod flag). The watchtower re-exposes them as
+    # watchtower_config_retention_seconds gauges so the Storage & Traffic
+    # dashboard can render "used / limit" panels without reparsing config.
+    environment:
+      - LOGS_RETENTION=720h
+      - METRICS_RETENTION=1
     command: run /config.toml
     networks:
       - watchtower-net
