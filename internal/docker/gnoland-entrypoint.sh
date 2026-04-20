@@ -28,6 +28,10 @@ fi
 
 # ---- Hardcoded Overrides
 echo "[${NODE_NAME}] Applying hardcoded overrides..."
+# moniker defaults to the container hostname (a 12-char short-ID) when unset,
+# which makes the watchtower's sentinel_node_build_info series unreadable in
+# dashboards. Pin it to the NODE_NAME so operators see node-1/node-2/…
+gnoland config set moniker "${NODE_NAME}" -config-path "$CONFIG_PATH"
 gnoland config set p2p.laddr "tcp://0.0.0.0:26656" -config-path "$CONFIG_PATH"
 gnoland config set rpc.laddr "tcp://0.0.0.0:26657" -config-path "$CONFIG_PATH"
 
