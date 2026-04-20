@@ -13,7 +13,7 @@
 #       <gnoland-container-name>
 #     - rpc_url      localhost -> node-N
 #     - min_level    info -> debug
-#     - listen_addr  localhost:4317 -> 0.0.0.0:4317 (OTLP)
+#     - listen_addr  localhost:4318 -> 0.0.0.0:4318 (OTLP)
 #     - resources.source  host -> both
 #     - metadata: drop config_path, add config_get_cmd using docker exec
 #
@@ -88,7 +88,7 @@ for i in $(seq 1 "$NUM_NODES"); do
     -e "s|'<gnoland-container-name>'|'${NODE}'|g" \
     -e "s|^rpc_url = 'http://localhost:26657'|rpc_url = 'http://${NODE}:26657'|" \
     -e "s|^min_level = 'info'|min_level = 'debug'|" \
-    -e "s|^listen_addr = 'localhost:4317'|listen_addr = '0.0.0.0:4317'|" \
+    -e "s|^listen_addr = 'localhost:4318'|listen_addr = '0.0.0.0:4318'|" \
     -e "s|^source = 'host'|source = 'both'|" \
     -e "s|^config_path = .*|config_get_cmd = 'docker exec ${NODE} gnoland config get %s -config-path /gnoland-data/config/config.toml'|" \
     "$SENTINEL_DEFAULT" > "$OUT"

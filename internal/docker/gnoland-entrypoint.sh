@@ -31,16 +31,16 @@ echo "[${NODE_NAME}] Applying hardcoded overrides..."
 gnoland config set p2p.laddr "tcp://0.0.0.0:26656" -config-path "$CONFIG_PATH"
 gnoland config set rpc.laddr "tcp://0.0.0.0:26657" -config-path "$CONFIG_PATH"
 
-# Route gnoland's OTLP export to the paired sentinel's relay (:4317 gRPC).
-# The bare host:port form lands metrics init in its grpc exporter branch
-# which accepts endpoint strings in this form. Traces stay disabled: gnoland's
-# traces init only accepts http/https schemes, whereas the sentinel relay is
-# gRPC-only — mixing them would crash gnoland at startup with "unsupported
-# scheme". Re-enable traces once the sentinel grows an HTTP traces endpoint.
+# Route gnoland's OTLP export to the paired sentinel's HTTP relay (:4318).
+# HTTP rather than gRPC: gnoland's traces init only accepts http/https schemes
+# — sharing a single HTTP endpoint across metrics and traces keeps gnoland
+# happy whether or not traces are enabled. Traces stay off by default because
+# watchtower has no trace backend yet (see docs/data-collected.md "Known
+# gaps"), but flipping the flag is now crash-safe.
 NODE_INDEX="${NODE_NAME#node-}"
 gnoland config set telemetry.metrics_enabled true -config-path "$CONFIG_PATH"
 gnoland config set telemetry.traces_enabled false -config-path "$CONFIG_PATH"
-gnoland config set telemetry.exporter_endpoint "sentinel-${NODE_INDEX}:4317" -config-path "$CONFIG_PATH"
+gnoland config set telemetry.exporter_endpoint "http://sentinel-${NODE_INDEX}:4318" -config-path "$CONFIG_PATH"
 gnoland config set telemetry.service_name "gno-cluster" -config-path "$CONFIG_PATH"
 gnoland config set telemetry.service_instance_id "${NODE_NAME}" -config-path "$CONFIG_PATH"
 
