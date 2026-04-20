@@ -8,9 +8,9 @@
 # rpc.laddr            = "tcp://0.0.0.0:26657"    # in-container RPC bind
 # p2p.persistent_peers = <derived from TOPOLOGY>  # auto-wired per node
 #
-# Telemetry keys (currently inactive pending a gnoland OTLP URL-format fix):
-# telemetry.metrics_enabled     = true
-# telemetry.traces_enabled      = true
+# Telemetry keys (pinned by the entrypoint; cannot be customized here):
+# telemetry.metrics_enabled     = true                 # OTLP export to sentinel-N:4317 (gRPC)
+# telemetry.traces_enabled      = false                # gnoland traces need http/https; sentinel is gRPC-only
 # telemetry.exporter_endpoint   = "sentinel-<N>:4317"
 # telemetry.service_name        = "gno-cluster"
 # telemetry.service_instance_id = "node-<N>"

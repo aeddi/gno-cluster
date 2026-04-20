@@ -30,15 +30,19 @@ fi
 echo "[${NODE_NAME}] Applying hardcoded overrides..."
 gnoland config set p2p.laddr "tcp://0.0.0.0:26656" -config-path "$CONFIG_PATH"
 gnoland config set rpc.laddr "tcp://0.0.0.0:26657" -config-path "$CONFIG_PATH"
-# TODO: Re-enable once gnoland gRPC OTLP endpoint format is resolved.
-# The sentinel OTLP relay is gRPC-only, but gnoland's URL parser can't handle
-# bare host:port for gRPC endpoints. Disabling telemetry for now.
-# gnoland config set telemetry.metrics_enabled true -config-path "$CONFIG_PATH"
-# gnoland config set telemetry.traces_enabled true -config-path "$CONFIG_PATH"
-# NODE_INDEX="${NODE_NAME#node-}"
-# gnoland config set telemetry.exporter_endpoint "sentinel-${NODE_INDEX}:4317" -config-path "$CONFIG_PATH"
-# gnoland config set telemetry.service_name "gno-cluster" -config-path "$CONFIG_PATH"
-# gnoland config set telemetry.service_instance_id "${NODE_NAME}" -config-path "$CONFIG_PATH"
+
+# Route gnoland's OTLP export to the paired sentinel's relay (:4317 gRPC).
+# The bare host:port form lands metrics init in its grpc exporter branch
+# which accepts endpoint strings in this form. Traces stay disabled: gnoland's
+# traces init only accepts http/https schemes, whereas the sentinel relay is
+# gRPC-only — mixing them would crash gnoland at startup with "unsupported
+# scheme". Re-enable traces once the sentinel grows an HTTP traces endpoint.
+NODE_INDEX="${NODE_NAME#node-}"
+gnoland config set telemetry.metrics_enabled true -config-path "$CONFIG_PATH"
+gnoland config set telemetry.traces_enabled false -config-path "$CONFIG_PATH"
+gnoland config set telemetry.exporter_endpoint "sentinel-${NODE_INDEX}:4317" -config-path "$CONFIG_PATH"
+gnoland config set telemetry.service_name "gno-cluster" -config-path "$CONFIG_PATH"
+gnoland config set telemetry.service_instance_id "${NODE_NAME}" -config-path "$CONFIG_PATH"
 
 if [[ -n "${PERSISTENT_PEERS:-}" ]]; then
   gnoland config set p2p.persistent_peers "${PERSISTENT_PEERS}" -config-path "$CONFIG_PATH"
