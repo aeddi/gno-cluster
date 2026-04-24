@@ -54,9 +54,13 @@ fi
 
 # ---- Start
 echo "[${NODE_NAME}] Starting gnoland..."
+# GNOLAND_EXTRA_FLAGS is word-split on whitespace; the default in
+# cluster.env.example includes -skip-genesis-sig-verification.
+# shellcheck disable=SC2086 # intentional word-splitting
 exec gnoland start \
-  -skip-genesis-sig-verification \
+  -skip-failing-genesis-txs \
   -log-level debug \
   -log-format json \
   -data-dir /gnoland-data \
-  -genesis /genesis.json
+  -genesis /genesis.json \
+  ${GNOLAND_EXTRA_FLAGS:-}

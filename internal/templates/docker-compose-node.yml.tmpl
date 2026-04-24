@@ -6,6 +6,7 @@
     environment:
       - NODE_NAME=node-__N__
       - PERSISTENT_PEERS=__PEERS__
+      - GNOLAND_EXTRA_FLAGS=${GNOLAND_EXTRA_FLAGS:-}
     volumes:
       - ./gnoland-data-__N__:/gnoland-data
       - ./genesis.json:/genesis.json:ro

@@ -38,6 +38,7 @@ NUM_NODES             ?= 4
 TOPOLOGY              ?= mesh
 GNOLAND_RPC_PORT_BASE ?= 26657
 GNOLAND_P2P_PORT_BASE ?= 26670
+GNOLAND_EXTRA_FLAGS   ?= -skip-genesis-sig-verification
 GRAFANA_PORT          ?= 3000
 VICTORIA_METRICS_PORT ?= 8428
 LOKI_PORT             ?= 3100
@@ -45,7 +46,7 @@ LOKI_PORT             ?= 3100
 # ---- Env export (passed to cluster.sh)
 export PROJECT_ROOT  := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 export GNO_VERSION GNO_REPO WATCHTOWER_VERSION WATCHTOWER_REPO
-export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GRAFANA_PORT VICTORIA_METRICS_PORT LOKI_PORT
+export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GNOLAND_EXTRA_FLAGS GRAFANA_PORT VICTORIA_METRICS_PORT LOKI_PORT
 
 # Cluster command are implemented in a bash script to allow for more complex logic
 # and better error handling. The Makefile is just a thin wrapper around it.
