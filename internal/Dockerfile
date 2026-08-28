@@ -3,7 +3,7 @@
 # Usage: docker build -f internal/Dockerfile --target <target> .
 
 # ---- Gno Builder
-FROM golang:1.24-alpine AS gno-builder
+FROM golang:1.26-alpine AS gno-builder
 
 ARG GNO_REPO=gnolang/gno
 ARG GNO_COMMIT_HASH
