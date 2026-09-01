@@ -1,0 +1,20 @@
+  gpao:
+    image: gno-cluster-gno-tools:latest
+    container_name: gpao
+    restart: unless-stopped
+    entrypoint: /gpao-entrypoint.sh
+    environment:
+      - GPAO_KEY_NAME=${GPAO_KEY_NAME:-approver}
+      - GPAO_REMOTE=http://node-1:26657
+    volumes:
+      - ./approver.mnemonic:/approver.mnemonic:ro
+      - ./genesis.json:/genesis.json:ro
+    networks:
+      - sidecar-1
+    depends_on:
+      - node-1
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "2"

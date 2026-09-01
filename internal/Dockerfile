@@ -132,3 +132,58 @@ RUN mkdir -p /export/defaults \
   && /tmp/sentinel   generate-config /export/defaults/sentinel.toml \
   && /tmp/watchtower generate-config /export/defaults/watchtower.toml \
   && rm -f /tmp/sentinel /tmp/watchtower
+
+# ---- Gno Tools
+# gnogenesis, gnokey and gpao built from the same commit as the node, plus the
+# gno source tree.
+#
+# The node image cannot stand in for this one: gnoland exposes no genesis
+# subcommand, and the runtime stage copies the stdlibs but not examples/. A
+# genesis builder needs gnogenesis and examples/; gpao needs gnokey for its
+# keystore and --gno-root to resolve stdlibs and examples while typechecking.
+# One image serves both, because compiling the gno tree is the slow part.
+FROM gno-builder AS gno-tools-builder
+
+# Stamped from /build_version like the gnoland build above, so `gnokey version`
+# and gpao's logs name the commit they came from.
+RUN cd /src/contribs/gnogenesis && go build \
+  -ldflags "-w -s -X github.com/gnolang/gno/tm2/pkg/version.Version=$(cat /build_version)" \
+  -o /build/gnogenesis .
+RUN cd /src/contribs/gpao && go build \
+  -ldflags "-w -s -X github.com/gnolang/gno/tm2/pkg/version.Version=$(cat /build_version)" \
+  -o /build/gpao .
+RUN cd /src/gno.land && go build \
+  -ldflags "-w -s -X github.com/gnolang/gno/tm2/pkg/version.Version=$(cat /build_version)" \
+  -o /build/gnokey ./cmd/gnokey
+
+FROM alpine:3 AS gno-tools
+ENV GNOROOT="/gnoroot"
+
+ARG GNO_COMMIT_HASH
+ARG GNO_VERSION
+ARG GNO_REPO
+ARG BUILD_DATE
+
+LABEL gno.commit="${GNO_COMMIT_HASH}" \
+  gno.version="${GNO_VERSION}" \
+  gno.repo="${GNO_REPO}" \
+  build.date="${BUILD_DATE}"
+
+RUN apk add --no-cache bash jq
+
+COPY --from=gno-tools-builder /build/gnogenesis /usr/local/bin/gnogenesis
+COPY --from=gno-tools-builder /build/gnokey     /usr/local/bin/gnokey
+COPY --from=gno-tools-builder /build/gpao       /usr/local/bin/gpao
+
+# Only the three trees the verifier reads under GNOROOT: gnovm/pkg/test's
+# import resolver joins gnovm/stdlibs, gnovm/tests/stdlibs and examples onto
+# the root. Copying all of /src instead drags in .git and the rest of the
+# repo for 330MB and no benefit.
+COPY --from=gno-builder /src/gnovm/stdlibs       /gnoroot/gnovm/stdlibs
+COPY --from=gno-builder /src/gnovm/tests/stdlibs /gnoroot/gnovm/tests/stdlibs
+COPY --from=gno-builder /src/examples            /gnoroot/examples
+
+COPY internal/docker/gpao-entrypoint.sh /gpao-entrypoint.sh
+RUN chmod +x /gpao-entrypoint.sh
+
+ENTRYPOINT ["/bin/bash"]

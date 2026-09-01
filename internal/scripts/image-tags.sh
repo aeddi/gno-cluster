@@ -12,7 +12,7 @@
 #         PROJECT_ROOT to be set.
 #   compute_image_tag <target> <gno_commit> <wt_commit>
 #       — echo the full tag for a target: "<commit12>-<content-hash>".
-#         target ∈ {gnoland, watchtower, sentinel}.
+#         target ∈ {gnoland, gno-tools, watchtower, sentinel}.
 #         gnoland uses gno_commit; watchtower/sentinel use wt_commit.
 #
 # Rationale: BUILD_DATE is deliberately excluded — it only appears in LABELs
@@ -69,7 +69,7 @@ compute_image_tag() {
   local target="$1" gno_commit="$2" wt_commit="$3"
   local commit
   case "$target" in
-  gnoland) commit="$gno_commit" ;;
+  gnoland | gno-tools) commit="$gno_commit" ;;
   watchtower | sentinel | config-export) commit="$wt_commit" ;;
   *)
     echo "Error: unknown target '$target'" >&2

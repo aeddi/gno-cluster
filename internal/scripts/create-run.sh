@@ -57,6 +57,17 @@ else
   touch "${RUN_DIR}/config.overrides"
 fi
 
+# The gpao service mounts the mnemonic from the run folder, so a past run keeps
+# working after the project-root file is changed or removed.
+if [[ "${GPAO_ENABLED:-false}" == "true" ]]; then
+  if [[ ! -f "${PROJECT_ROOT}/approver.mnemonic" ]]; then
+    echo "Error: GPAO_ENABLED is true but approver.mnemonic is missing." >&2
+    echo "  Write the approver's bip39 mnemonic to ${PROJECT_ROOT}/approver.mnemonic" >&2
+    exit 1
+  fi
+  cp "${PROJECT_ROOT}/approver.mnemonic" "${RUN_DIR}/approver.mnemonic"
+fi
+
 # ---- Copy secrets and set up node data dirs
 echo "  Setting up node data directories..."
 for i in $(seq 1 "$NUM_NODES"); do

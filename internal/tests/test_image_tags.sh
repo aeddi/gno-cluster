@@ -110,4 +110,13 @@ err_code=$?
 set -e
 assert_eq "unknown target exits non-zero" "1" "$err_code"
 
+# ---- gno-tools tracks the gno commit
+echo "-- compute_image_tag gno-tools --"
+
+tools_tag=$(compute_image_tag gno-tools "$GNO_COMMIT" "$WT_COMMIT")
+assert_eq "gno-tools shares gnoland's commit prefix" \
+  "${gnoland_tag%%-*}" "${tools_tag%%-*}"
+assert_eq "gno-tools shares the content hash" \
+  "${gnoland_tag##*-}" "${tools_tag##*-}"
+
 summary

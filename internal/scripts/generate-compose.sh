@@ -110,6 +110,16 @@ for i in $(seq 1 "$NUM_NODES"); do
   echo "    Added node-${i} + sentinel-${i}"
 done
 
+# ---- gpao approver
+# Opt-in: a cluster not running the inert code-submission policy has no
+# approver role to fill. It joins node-1's sidecar network, since it speaks RPC
+# to one node and takes no part in P2P.
+if [[ "${GPAO_ENABLED:-false}" == "true" ]]; then
+  cat "${TEMPLATES_DIR}/docker-compose-gpao.yml.tmpl" >>"$COMPOSE_FILE"
+  echo "" >>"$COMPOSE_FILE"
+  echo "    Added gpao"
+fi
+
 # ---- Networks section: build sidecar and topology network definitions
 TMPSIDECAR=$(mktemp)
 TMPFILES+=("$TMPSIDECAR")
