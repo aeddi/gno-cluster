@@ -14,6 +14,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CURRENT_LINK="${PROJECT_ROOT}/runs/current"
 GNOLAND_IMAGE="gno-cluster-gnoland:latest"
+TOOLS_IMAGE="gno-cluster-gno-tools:latest"
 
 # Operate from the project root so CWD-relative paths (internal/secrets/,
 # internal/, docker build context ".", etc.) resolve correctly regardless of
@@ -288,8 +289,9 @@ cmd_build() {
   local build_date
   build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-  local gnoland_tag watchtower_tag sentinel_tag config_export_tag
+  local gnoland_tag tools_tag watchtower_tag sentinel_tag config_export_tag
   gnoland_tag=$(compute_image_tag gnoland "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
+  tools_tag=$(compute_image_tag gno-tools "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
   watchtower_tag=$(compute_image_tag watchtower "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
   sentinel_tag=$(compute_image_tag sentinel "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
   config_export_tag=$(compute_image_tag config-export "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
@@ -299,6 +301,12 @@ cmd_build() {
   echo ""
 
   _build_image gnoland "$gnoland_tag" "$force" \
+    --build-arg "GNO_REPO=${GNO_REPO}" \
+    --build-arg "GNO_COMMIT_HASH=${GNO_COMMIT}" \
+    --build-arg "GNO_VERSION=${GNO_VERSION}" \
+    --build-arg "BUILD_DATE=${build_date}"
+
+  _build_image gno-tools "$tools_tag" "$force" \
     --build-arg "GNO_REPO=${GNO_REPO}" \
     --build-arg "GNO_COMMIT_HASH=${GNO_COMMIT}" \
     --build-arg "GNO_VERSION=${GNO_VERSION}" \
@@ -378,6 +386,20 @@ ensure_images_for_run() {
   docker tag "$PREV_GNOLAND_IMAGE" gno-cluster-gnoland:latest
   docker tag "$PREV_WATCHTOWER_IMAGE" gno-cluster-watchtower:latest
   docker tag "$PREV_SENTINEL_IMAGE" gno-cluster-sentinel:latest
+
+  # The tools image carries gpao, whose approve-or-reject verdict is a gnovm
+  # typecheck. Left at :latest it would verify against whichever commit was
+  # built most recently, so a past run's chain could be judged by a different
+  # gno than it runs. Empty for a run created before the tools image existed.
+  if [[ -n "${PREV_TOOLS_IMAGE:-}" ]]; then
+    if ! docker image inspect "$PREV_TOOLS_IMAGE" >/dev/null 2>&1; then
+      echo "Error: pinned image ${PREV_TOOLS_IMAGE} is not present."
+      echo "  It may have been removed via 'make clean-imgs' or 'docker image prune'."
+      echo "  Run 'make update' to rebuild this run's images."
+      exit 1
+    fi
+    docker tag "$PREV_TOOLS_IMAGE" "$TOOLS_IMAGE"
+  fi
   # Override the resolved commits with the pinned ones so any downstream
   # user of GNO_COMMIT sees what's actually running.
   export GNO_COMMIT="$PREV_GNO_COMMIT"
@@ -409,6 +431,21 @@ _ensure_node_secrets() {
       secrets get node_id.id -raw --data-dir /gnoland-data 2>/dev/null)
     echo "$node_id" >"internal/secrets/node-${i}/node_id"
   done
+}
+
+# Generates node secrets without creating a run.
+#
+# A genesis builder needs the validator public keys before a genesis exists,
+# but cmd_create generates the secrets and then aborts before printing them
+# when genesis.json is absent. Reaching the keys that way means running
+# create, letting it fail, and running it again once the genesis it could not
+# describe has been written. This is the same generation step on its own.
+cmd_secrets() {
+  resolve_commits
+  cmd_build
+  echo ""
+  _ensure_node_secrets
+  _print_node_info_table
 }
 
 _print_node_info_table() {
@@ -760,7 +797,7 @@ cmd_clone() {
 
   echo "  Copying configs..."
   local f
-  for f in genesis.json cluster.env config.overrides docker-compose.yml watchtower.toml loki-config.yml .build-state; do
+  for f in genesis.json cluster.env config.overrides approver.mnemonic docker-compose.yml watchtower.toml loki-config.yml .build-state; do
     [[ -f "${source_dir}/${f}" ]] && cp "${source_dir}/${f}" "${new_dir}/${f}"
   done
   cp "${source_dir}"/sentinel-*-config.toml "${new_dir}/" 2>/dev/null || true
@@ -1393,12 +1430,13 @@ cmd_clean() {
 
 # ---- Dispatch
 
-command="${1:?Usage: cluster.sh <command> (build|create|list|start|stop|restart|clone|clone-full|status|logs|infos|update|clean|clean-runs|clean-imgs)}"
+command="${1:?Usage: cluster.sh <command> (build|create|secrets|list|start|stop|restart|clone|clone-full|status|logs|infos|update|clean|clean-runs|clean-imgs)}"
 shift || true
 
 case "$command" in
 build) cmd_build "$@" ;;
 create) cmd_create "$@" ;;
+secrets) cmd_secrets ;;
 start) cmd_start "$@" ;;
 stop) cmd_stop ;;
 restart) cmd_restart "$@" ;;

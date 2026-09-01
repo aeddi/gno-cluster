@@ -33,10 +33,11 @@ source "${_BUILD_STATE_DIR}/image-tags.sh"
 # truncated file that would confuse read_build_state_as_prev.
 write_build_state() {
   local out_file="$1"
-  local build_date content_hash gnoland_tag watchtower_tag sentinel_tag file_lines
+  local build_date content_hash gnoland_tag tools_tag watchtower_tag sentinel_tag file_lines
   build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   content_hash=$(compute_build_hash)
   gnoland_tag=$(compute_image_tag gnoland "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
+  tools_tag=$(compute_image_tag gno-tools "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
   watchtower_tag=$(compute_image_tag watchtower "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
   sentinel_tag=$(compute_image_tag sentinel "$GNO_COMMIT" "$WATCHTOWER_COMMIT")
   file_lines=$(compute_file_hashes_for \
@@ -57,6 +58,7 @@ write_build_state() {
     echo "GNO_VERSION=\"${GNO_VERSION}\""
     echo "GNO_COMMIT=\"${GNO_COMMIT}\""
     echo "GNOLAND_IMAGE=\"gno-cluster-gnoland:${gnoland_tag}\""
+    echo "TOOLS_IMAGE=\"gno-cluster-gno-tools:${tools_tag}\""
     echo ""
     echo "WATCHTOWER_REPO=\"${WATCHTOWER_REPO}\""
     echo "WATCHTOWER_VERSION=\"${WATCHTOWER_VERSION}\""
@@ -96,6 +98,7 @@ read_build_state_as_prev() {
     echo "PREV_GNO_VERSION=\"${GNO_VERSION:-}\""
     echo "PREV_GNO_COMMIT=\"${GNO_COMMIT:-}\""
     echo "PREV_GNOLAND_IMAGE=\"${GNOLAND_IMAGE:-}\""
+    echo "PREV_TOOLS_IMAGE=\"${TOOLS_IMAGE:-}\""
     echo "PREV_WATCHTOWER_REPO=\"${WATCHTOWER_REPO:-}\""
     echo "PREV_WATCHTOWER_VERSION=\"${WATCHTOWER_VERSION:-}\""
     echo "PREV_WATCHTOWER_COMMIT=\"${WATCHTOWER_COMMIT:-}\""

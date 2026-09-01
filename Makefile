@@ -7,6 +7,7 @@
 #   clone        [run=<folder>]   Clone a run with fresh chain state (run= targets a past run, else current)
 #   clone-full   [run=<folder>]   Full clone including chain/WAL/signing state/loki/victoria/grafana data
 #   update       [run=<folder>]   Rebuild drifted images and restart (run= targets a past run, else current)
+#   secrets                       Generate node secrets without creating a run
 #
 # Cluster ops:
 #   list                          List all runs with state, config, height, and on-disk sizes
@@ -42,23 +43,29 @@ GNOLAND_EXTRA_FLAGS   ?= -skip-genesis-sig-verification
 GRAFANA_PORT          ?= 3000
 VICTORIA_METRICS_PORT ?= 8428
 LOKI_PORT             ?= 3100
+GPAO_ENABLED          ?= false
+GPAO_KEY_NAME         ?= approver
 
 # ---- Env export (passed to cluster.sh)
 export PROJECT_ROOT  := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 export GNO_VERSION GNO_REPO WATCHTOWER_VERSION WATCHTOWER_REPO
 export NUM_NODES TOPOLOGY GNOLAND_RPC_PORT_BASE GNOLAND_P2P_PORT_BASE GNOLAND_EXTRA_FLAGS GRAFANA_PORT VICTORIA_METRICS_PORT LOKI_PORT
+export GPAO_ENABLED GPAO_KEY_NAME
 
 # Cluster command are implemented in a bash script to allow for more complex logic
 # and better error handling. The Makefile is just a thin wrapper around it.
 CLUSTER := bash $(PROJECT_ROOT)/internal/scripts/cluster.sh
 
-.PHONY: help build test create list start stop restart clone clone-full status logs infos update clean clean-runs clean-imgs
+.PHONY: help build test create secrets list start stop restart clone clone-full status logs infos update clean clean-runs clean-imgs
 
 help:
 	@awk '/^# Usage:/,/^$$/{sub(/^# ?/,""); print}' $(MAKEFILE_LIST)
 
 create:
 	@$(CLUSTER) create $(yes)
+
+secrets:
+	@$(CLUSTER) secrets
 
 list:
 	@$(CLUSTER) list
